@@ -1,0 +1,21 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app_name": "Daily",
+	"app_tagline": "Les points de retrait mobile money près de vous",
+	"nav_label": "Navigation principale",
+	"nav_map": "Carte",
+	"nav_saved": "Enregistrés",
+	"nav_profile": "Profil",
+	"saved_empty_title": "Aucun point enregistré",
+	"saved_empty_body": "Ouvrez un point de retrait sur la carte et touchez Enregistrer pour le retrouver ici rapidement.",
+	"profile_title": "Profil",
+	"settings_language": "Langue",
+	"settings_theme": "Thème",
+	"theme_system": "Système",
+	"theme_light": "Clair",
+	"theme_dark": "Sombre",
+	"language_en": "English",
+	"language_fr": "Français",
+	"update_available": "Une nouvelle version de Daily est disponible.",
+	"update_apply": "Mettre à jour"
+}

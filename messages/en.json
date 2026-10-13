@@ -1,0 +1,21 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app_name": "Daily",
+	"app_tagline": "Mobile money cash points near you",
+	"nav_label": "Main navigation",
+	"nav_map": "Map",
+	"nav_saved": "Saved",
+	"nav_profile": "Profile",
+	"saved_empty_title": "No saved points yet",
+	"saved_empty_body": "Open a cash point on the map and tap Save to find it here quickly.",
+	"profile_title": "Profile",
+	"settings_language": "Language",
+	"settings_theme": "Theme",
+	"theme_system": "System",
+	"theme_light": "Light",
+	"theme_dark": "Dark",
+	"language_en": "English",
+	"language_fr": "Français",
+	"update_available": "A new version of Daily is available.",
+	"update_apply": "Update"
+}

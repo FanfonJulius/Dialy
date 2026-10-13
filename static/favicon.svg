@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+	<title>Daily</title>
+	<rect width="512" height="512" rx="112" fill="#ffb020" />
+	<path d="M160.74 256A110 110 0 1 1 351.26 256L256 421Z" fill="#1a1a1a" />
+	<circle cx="256" cy="201" r="46" fill="#ffb020" />
+</svg>
