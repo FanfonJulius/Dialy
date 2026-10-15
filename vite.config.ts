@@ -3,8 +3,25 @@ import adapter from '@sveltejs/adapter-static';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 
-export default defineConfig({
+type Origin = `${string}://${string}.${string}` | `${string}://localhost:${number}`;
+
+function origin(url: string | undefined): Origin[] {
+	try {
+		return url ? [new URL(url).origin as Origin] : [];
+	} catch {
+		return [];
+	}
+}
+
+export default defineConfig(({ mode }) => {
+	const env = loadEnv(mode, process.cwd(), 'PUBLIC_');
+	// Only the project's own Supabase and tile origins may be contacted.
+	const connect = [
+		...new Set([...origin(env.PUBLIC_SUPABASE_URL), ...origin(env.PUBLIC_TILES_BASE_URL)])
+	];
+	return {
 	plugins: [
 		tailwindcss(),
 		paraglideVitePlugin({
@@ -28,7 +45,7 @@ export default defineConfig({
 					'style-src': ['self', 'unsafe-inline'],
 					'img-src': ['self', 'data:', 'blob:'],
 					'font-src': ['self'],
-					'connect-src': ['self', 'https://*.supabase.co'],
+					'connect-src': ['self', ...(connect.length ? connect : (['https://*.supabase.co'] as const))],
 					'worker-src': ['self', 'blob:'],
 					'manifest-src': ['self'],
 					'object-src': ['none'],
@@ -39,9 +56,10 @@ export default defineConfig({
 		})
 	],
 	test: {
-		include: ['src/**/*.test.ts', 'supabase/tests/**/*.test.ts'],
+		include: ['src/**/*.test.ts', 'supabase/tests/**/*.test.ts', 'scripts/**/*.test.ts'],
 		environment: 'node',
 		testTimeout: 60_000,
 		hookTimeout: 180_000
 	}
+	};
 });

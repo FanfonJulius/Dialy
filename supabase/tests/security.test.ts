@@ -60,7 +60,8 @@ describe('anonymous users', () => {
 		'select * from public.points_in_bbox(9.7, 4.0, 9.8, 4.1)',
 		'select * from public.nearby_points(4.05, 9.76)',
 		`select * from public.record_withdrawal('${randomUUID()}', 'mtn', '54321', 5000, 4.05, 9.76, 10)`,
-		'select public.delete_my_account()'
+		'select public.delete_my_account()',
+		'select * from public.my_saved_points()'
 	])('cannot call %s', async (sql) => {
 		await actAs(db, null);
 		expectPermissionDenied((await attempt(db, sql)).error);
@@ -161,6 +162,35 @@ describe('private data', () => {
 
 		await actAs(db, alice);
 		expect((await db.query('select * from public.saved_points')).rows).toHaveLength(1);
+	});
+
+	it('lists only the caller\'s saved points, with their details, newest first', async () => {
+		const first = await createPoint(alice, '11111');
+		const second = await createPoint(bob, '22222');
+		await actAs(db, alice);
+		await db.query('insert into public.saved_points (point_id, created_at) values ($1, now() - interval \'1 hour\')', [first]);
+		await db.query('insert into public.saved_points (point_id) values ($1)', [second]);
+
+		const { rows } = await db.query<{ point_id: string; code: string; lat: number; lng: number }>(
+			'select point_id, code, lat, lng from public.my_saved_points()'
+		);
+		expect(rows.map((row) => row.code)).toEqual(['22222', '11111']);
+		expect(rows[0].lat).toBeCloseTo(DOUALA.lat, 5);
+		expect(rows[0].lng).toBeCloseTo(DOUALA.lng, 5);
+
+		await actAs(db, bob);
+		expect((await db.query('select * from public.my_saved_points()')).rows).toHaveLength(0);
+	});
+
+	it('leaves hidden points out of the saved list', async () => {
+		const pointId = await createPoint(alice);
+		await actAs(db, alice);
+		await db.query('insert into public.saved_points (point_id) values ($1)', [pointId]);
+		await actAsAdmin(db);
+		await db.query(`update public.points set status = 'hidden' where id = $1`, [pointId]);
+
+		await actAs(db, alice);
+		expect((await db.query('select * from public.my_saved_points()')).rows).toHaveLength(0);
 	});
 
 	it('creates a profile on sign-up that only its owner can read and change', async () => {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { m } from '#lib/paraglide/messages.js';
+	import AccountSection from '#lib/features/profile/AccountSection.svelte';
 	import LanguageSwitcher from '#lib/features/profile/LanguageSwitcher.svelte';
 	import ThemeSwitcher from '#lib/features/profile/ThemeSwitcher.svelte';
 </script>
@@ -10,4 +11,5 @@
 		<LanguageSwitcher />
 		<ThemeSwitcher />
 	</div>
+	<AccountSection />
 </section>

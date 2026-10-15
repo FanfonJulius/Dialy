@@ -1,0 +1,47 @@
+name: Map tiles
+
+on:
+  schedule:
+    - cron: '0 3 1 * *' # monthly
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Protomaps build (YYYYMMDD); empty for the latest
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: map-tiles
+  cancel-in-progress: false
+
+jobs:
+  tiles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PMTILES_VERSION: 1.31.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install pmtiles CLI
+        run: |
+          curl -fsSL --retry 5 -o pmtiles.tar.gz \
+            "https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf pmtiles.tar.gz pmtiles
+          sudo mv pmtiles /usr/local/bin/pmtiles
+          pmtiles version
+      - name: Build
+        run: node scripts/tiles/build-tiles.ts $BUILD
+        env:
+          BUILD: ${{ inputs.build }}
+      - name: Publish
+        run: node scripts/tiles/publish-tiles.ts
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

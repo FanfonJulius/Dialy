@@ -7,6 +7,6 @@
 			"node"
 		]
 	},
-	"include": ["src", "supabase/tests", "vite.config.ts"],
+	"include": ["src", "supabase/tests", "scripts", "vite.config.ts"],
 	"exclude": ["src/service-worker"]
 }
