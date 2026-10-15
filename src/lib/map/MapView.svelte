@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { GeoJSONSource, Map as MapLibreMap, MapGeoJSONFeature } from 'maplibre-gl';
+	import type { GeoJSONSource, Map as MapLibreMap, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import type { Bounds, LatLng } from '#lib/domain/geo.js';
 	import type { Fix } from '#lib/domain/location.js';
 	import type { CashPoint } from '#lib/domain/points.js';
+	import type { ResolvedTheme } from '#lib/domain/theme.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { theme } from '#lib/stores/theme.svelte.js';
@@ -21,20 +22,26 @@
 		userGeoJson
 	} from './overlays.ts';
 	import { buildStyle, type BasemapTiles } from './style.ts';
-	import { TILE_PROTOCOL, TILE_URL_TEMPLATE, createTileProtocol, loadTileManifest } from './tile-source.ts';
+	import { loadFallbackStyle } from './fallback-style.ts';
+	import { TILE_PROTOCOL, TILE_URL_TEMPLATE, createTileProtocol } from './tile-protocol.ts';
+	import { loadTileManifest, pmtilesFetcher } from './tile-source.ts';
+	import { tileStore } from '#lib/data/local/tile-store.js';
 
 	type Props = {
 		points: readonly CashPoint[];
 		fix: Fix | null;
 		selectedId: string | null;
+		/** Height in pixels of the panels covering the bottom of the map; map credits stay above them. */
+		bottomInset?: number;
 		onselect: (id: string | null) => void;
 		onmoveend: (bounds: Bounds) => void;
 		ondragstart?: () => void;
 	};
 
-	let { points, fix, selectedId, onselect, onmoveend, ondragstart }: Props = $props();
+	let { points, fix, selectedId, bottomInset = 0, onselect, onmoveend, ondragstart }: Props = $props();
 
 	const CAMERA_KEY = 'daily.camera';
+	const POINTS_UPDATE_MS = 150;
 	const DEFAULT_CAMERA = { lng: 11.5021, lat: 3.848, zoom: 12 }; // Yaoundé
 	// Cameroon with a margin, so the map never drifts somewhere the app does not serve.
 	const MAX_BOUNDS: [[number, number], [number, number]] = [
@@ -44,7 +51,9 @@
 
 	let container: HTMLDivElement;
 	let map = $state.raw<MapLibreMap | null>(null);
+	let instance: MapLibreMap | null = null;
 	let tiles: BasemapTiles | null = null;
+	let fallback: StyleSpecification | null = null;
 	// A fly requested before the map has loaded (e.g. the first location fix) runs once it loads.
 	let pendingFly: { target: LatLng; zoom: number | undefined } | null = null;
 
@@ -79,9 +88,18 @@
 			theme: theme.resolved,
 			locale: getLocale(),
 			tiles,
+			fallback,
 			overlaySources: overlaySources(pointsGeoJson(points), userGeoJson(fix)),
 			overlayLayers: overlayLayers(readOverlayColors(), selectedId)
 		});
+	}
+
+	// Without Daily's own tiles, show the online OpenStreetMap map rather than a blank background.
+	async function useFallback(forTheme: ResolvedTheme): Promise<void> {
+		const loaded = await loadFallbackStyle(forTheme);
+		if (!loaded || !instance || tiles || theme.resolved !== forTheme) return;
+		fallback = loaded;
+		instance.setStyle(style());
 	}
 
 	export function flyTo(target: LatLng, zoom?: number): void {
@@ -95,13 +113,12 @@
 	onMount(() => {
 		let disposed = false;
 		let protocolAdded = false;
-		let instance: MapLibreMap | null = null;
 
 		void (async () => {
 			const [maplibre, manifest] = await Promise.all([loadMaplibre(), loadTileManifest()]);
 			if (disposed) return;
 			if (manifest) {
-				maplibre.addProtocol(TILE_PROTOCOL, createTileProtocol(manifest));
+				maplibre.addProtocol(TILE_PROTOCOL, createTileProtocol(manifest, tileStore, pmtilesFetcher(manifest)));
 				protocolAdded = true;
 				tiles = { url: TILE_URL_TEMPLATE, maxZoom: manifest.detail.maxZoom, attribution: manifest.attribution };
 			}
@@ -116,9 +133,10 @@
 				dragRotate: false,
 				pitchWithRotate: false,
 				touchPitch: false,
-				attributionControl: { compact: true },
+				attributionControl: false,
 				locale: { 'AttributionControl.ToggleAttribution': m.map_attribution_toggle() }
 			});
+			instance.addControl(new maplibre.AttributionControl({ compact: true }), 'bottom-left');
 			instance.touchZoomRotate.disableRotation();
 			instance.keyboard.disableRotation();
 
@@ -168,11 +186,13 @@
 				if (pendingFly) flyTo(pendingFly.target, pendingFly.zoom);
 				pendingFly = null;
 			});
+			if (!manifest) void useFallback(theme.resolved);
 		})();
 
 		return () => {
 			disposed = true;
 			instance?.remove();
+			instance = null;
 			map = null;
 			if (protocolAdded) void loadMaplibre().then((maplibre) => maplibre.removeProtocol(TILE_PROTOCOL));
 		};
@@ -184,12 +204,17 @@
 		const current = theme.resolved;
 		if (!map || current === styledTheme) return;
 		styledTheme = current;
-		map.setStyle(style(), { diff: true });
+		if (tiles) map.setStyle(style(), { diff: true });
+		else void useFallback(current);
 	});
 
+	// Points arrive in bursts (area downloads, sync pages): re-cluster once they settle.
+	let pointsTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		const data = pointsGeoJson(points);
-		map?.getSource<GeoJSONSource>(POINTS_SOURCE)?.setData(data);
+		const target = map;
+		clearTimeout(pointsTimer);
+		pointsTimer = setTimeout(() => target?.getSource<GeoJSONSource>(POINTS_SOURCE)?.setData(data), POINTS_UPDATE_MS);
 	});
 
 	$effect(() => {
@@ -203,4 +228,17 @@
 	});
 </script>
 
-<div bind:this={container} class="size-full" role="region" aria-label={m.map_label()}></div>
+<div
+	bind:this={container}
+	class="map size-full"
+	style:--map-bottom-inset="{bottomInset}px"
+	role="region"
+	aria-label={m.map_label()}
+></div>
+
+<style>
+	.map :global(.maplibregl-ctrl-bottom-left),
+	.map :global(.maplibregl-ctrl-bottom-right) {
+		bottom: var(--map-bottom-inset, 0px);
+	}
+</style>

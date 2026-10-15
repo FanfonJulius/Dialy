@@ -17,9 +17,11 @@ SvelteKit 3 (static SPA) + Supabase (Postgres/PostGIS). Daily never asks for, se
 | `npm run preview` | Serve the production build on http://localhost:4173 |
 | `npm run check` | Strict type check (app + service worker) |
 | `npm test` | Unit tests and database tests (in-memory Postgres + PostGIS via PGlite, no Docker) |
+| `npm run test:e2e` | End-to-end tests of the production build in a real browser against a fake backend (`e2e/`); uses the installed Edge locally |
 | `npm run icons` | Redraw the placeholder PWA icons into `static/icons/` (Windows) |
 | `npm run db:new -- <name>` | Create a new migration |
 | `npm run db:push` | Apply migrations to the linked Supabase project |
+| `npm run tiles:build` / `tiles:publish` | Build and upload the map tiles (normally run by the "Map tiles" GitHub workflow) |
 
 ## Database
 

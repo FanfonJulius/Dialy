@@ -18,3 +18,16 @@ export function fillUssdTemplate(template: string, code: string, amount: number)
 export function ussdTelHref(ussd: string): string {
 	return `tel:${ussd.replaceAll('#', '%23')}`;
 }
+
+export type UssdSegment = { kind: 'text'; value: string } | { kind: 'code' } | { kind: 'amount' };
+
+/** The template as fixed text and blanks, e.g. `*126*16*` [code] `*` [amount] `#`, to show it filling in. */
+export function ussdSegments(template: string): UssdSegment[] {
+	if (!isValidUssdTemplate(template)) return [];
+	return template
+		.split(/(\{code\}|\{amount\})/)
+		.filter((part) => part !== '')
+		.map((part): UssdSegment =>
+			part === '{code}' ? { kind: 'code' } : part === '{amount}' ? { kind: 'amount' } : { kind: 'text', value: part }
+		);
+}

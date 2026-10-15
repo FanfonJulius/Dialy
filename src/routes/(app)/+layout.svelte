@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import OutboxNotice from '#lib/features/withdraw/OutboxNotice.svelte';
 	import { geolocation } from '#lib/location/geolocation.svelte.js';
+	import { areas } from '#lib/stores/areas.svelte.js';
 	import { connectivity } from '#lib/stores/connectivity.svelte.js';
 	import { localData } from '#lib/stores/local-data.svelte.js';
 	import { outbox } from '#lib/stores/outbox.svelte.js';
@@ -19,6 +20,7 @@
 		localData.start();
 		outbox.start();
 		saved.start();
+		areas.start();
 		void localData.refreshNetworks();
 		// Location is used only while the app screens are open and visible.
 		geolocation.start();

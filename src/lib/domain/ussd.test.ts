@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { fillUssdTemplate, isValidUssdTemplate, ussdTelHref } from './ussd.ts';
+import { fillUssdTemplate, isValidUssdTemplate, ussdSegments, ussdTelHref } from './ussd.ts';
+
+describe('ussdSegments', () => {
+	it('splits the templates into fixed text and blanks', () => {
+		expect(ussdSegments('*126*16*{code}*{amount}#')).toEqual([
+			{ kind: 'text', value: '*126*16*' },
+			{ kind: 'code' },
+			{ kind: 'text', value: '*' },
+			{ kind: 'amount' },
+			{ kind: 'text', value: '#' }
+		]);
+		expect(ussdSegments('#150*14*{code}*{amount}#')[0]).toEqual({ kind: 'text', value: '#150*14*' });
+	});
+
+	it('returns nothing for a malformed template', () => {
+		expect(ussdSegments('*126*{code}#')).toEqual([]);
+	});
+});
 
 describe('fillUssdTemplate', () => {
 	it.each([

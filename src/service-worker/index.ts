@@ -55,9 +55,8 @@ if (!dev) {
 		event.waitUntil(deleteOldCaches().then(() => self.clients.claim()));
 	});
 
-	self.addEventListener('message', (event) => {
-		if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
-	});
+	// No skipWaiting: a new version waits until every open window of the old one is closed,
+	// so it is applied silently the next time Daily is opened and never breaks a running page.
 
 	self.addEventListener('fetch', (event) => {
 		const { request } = event;

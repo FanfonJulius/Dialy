@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Public placeholders the build validates; no test talks to a real backend.
+      # A file (not job env) so the e2e build's .env.e2e still takes precedence.
+      - name: Placeholder environment
+        run: |
+          printf '%s\n' \
+            'PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co' \
+            'PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder_000000' > .env
+      - name: Type check
+        run: npm run check
+      - name: Unit and database tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Install Chromium for end-to-end tests
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

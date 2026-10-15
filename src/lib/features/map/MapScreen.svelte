@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { distanceMeters, type Bounds } from '#lib/domain/geo.js';
 	import { matchesFilter, nearestPoints, type CashPoint, type PointFilter } from '#lib/domain/points.js';
+	import DownloadAreaSheet from '#lib/features/areas/DownloadAreaSheet.svelte';
 	import NewWithdrawalSheet from '#lib/features/withdraw/NewWithdrawalSheet.svelte';
 	import { geolocation } from '#lib/location/geolocation.svelte.js';
 	import MapView from '#lib/map/MapView.svelte';
@@ -8,6 +10,7 @@
 	import { connectivity } from '#lib/stores/connectivity.svelte.js';
 	import { localData, pointsSync } from '#lib/stores/local-data.svelte.js';
 	import { mapFocus } from '#lib/stores/map-focus.svelte.js';
+	import { outbox } from '#lib/stores/outbox.svelte.js';
 	import Icon from '#lib/ui/Icon.svelte';
 	import MapSearch from './MapSearch.svelte';
 	import NearbySheet from './NearbySheet.svelte';
@@ -19,8 +22,11 @@
 	let filter = $state<PointFilter>({ network: 'all', code: '' });
 	let selectedId = $state<string | null>(null);
 	let withdrawing = $state(false);
+	/** The area shown when the user asked to download it. */
+	let downloadBounds = $state.raw<Bounds | null>(null);
 	let noticeDismissed = $state(false);
-	let lastBounds: Bounds | null = null;
+	let lastBounds = $state.raw<Bounds | null>(null);
+	let bottomPanelHeight = $state(0);
 	// Follow the first fix once, unless the user already moved the map themselves.
 	let centeredOnUser = false;
 
@@ -57,7 +63,9 @@
 
 	// Back online: fetch what changed in the current view.
 	$effect(() => {
-		if (connectivity.online && lastBounds) sync(lastBounds);
+		if (!connectivity.online) return;
+		const bounds = untrack(() => lastBounds);
+		if (bounds) sync(bounds);
 	});
 
 	function sync(bounds: Bounds): void {
@@ -68,6 +76,7 @@
 
 	function select(point: CashPoint): void {
 		withdrawing = false;
+		downloadBounds = null;
 		selectedId = point.id;
 		mapView?.flyTo(point);
 	}
@@ -89,6 +98,7 @@
 		points={visiblePoints}
 		fix={geolocation.fix}
 		{selectedId}
+		bottomInset={bottomPanelHeight}
 		onselect={(id) => {
 			selectedId = id;
 			if (id) withdrawing = false;
@@ -102,19 +112,39 @@
 			<div class="min-w-0 flex-1">
 				<MapSearch bind:filter networks={localData.networks} />
 			</div>
-			<button
-				type="button"
-				class="rounded-full border border-border bg-surface p-3 text-fg shadow-md"
-				aria-label={m.map_recenter()}
-				onclick={recenter}
-			>
-				<Icon name="locate" class="size-5" />
-			</button>
+			<div class="flex flex-col gap-2">
+				<button
+					type="button"
+					class="rounded-full border border-border bg-surface p-3 text-fg shadow-md"
+					aria-label={m.map_recenter()}
+					onclick={recenter}
+				>
+					<Icon name="locate" class="size-5" />
+				</button>
+				<button
+					type="button"
+					class="rounded-full border border-border bg-surface p-3 text-fg shadow-md disabled:opacity-50"
+					aria-label={m.areas_download()}
+					disabled={!lastBounds}
+					onclick={() => {
+						selectedId = null;
+						withdrawing = false;
+						downloadBounds = lastBounds;
+					}}
+				>
+					<Icon name="download" class="size-5" />
+				</button>
+			</div>
 		</div>
 
 		{#if !connectivity.online}
 			<p class="self-center rounded-full bg-fg px-3 py-1 text-xs font-medium text-bg shadow" role="status">
 				{m.map_offline()}
+			</p>
+		{/if}
+		{#if outbox.pending > 0}
+			<p class="self-center rounded-full bg-surface px-3 py-1 text-xs font-medium text-fg shadow" role="status">
+				{m.map_pending({ count: String(outbox.pending) })}
 			</p>
 		{/if}
 
@@ -131,7 +161,7 @@
 		{/if}
 	</div>
 
-	<div class="absolute inset-x-0 bottom-0">
+	<div class="absolute inset-x-0 bottom-0" bind:clientHeight={bottomPanelHeight}>
 		{#if selected}
 			<PointCard
 				point={selected}
@@ -140,6 +170,8 @@
 				distanceM={geolocation.fix ? distanceMeters(geolocation.fix, selected) : null}
 				onclose={() => (selectedId = null)}
 			/>
+		{:else if downloadBounds}
+			<DownloadAreaSheet bounds={downloadBounds} onclose={() => (downloadBounds = null)} />
 		{:else if withdrawing}
 			<NewWithdrawalSheet
 				networks={localData.networks}

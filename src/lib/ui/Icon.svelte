@@ -9,6 +9,7 @@
 		| 'close'
 		| 'chevron-up'
 		| 'copy'
+		| 'download'
 		| 'phone'
 		| 'eye'
 		| 'eye-off';
@@ -52,6 +53,8 @@
 	{:else if name === 'copy'}
 		<rect x="8.5" y="8.5" width="12" height="12" rx="2" />
 		<path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5" />
+	{:else if name === 'download'}
+		<path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M4.5 19.5h15" />
 	{:else if name === 'phone'}
 		<path
 			d="M5 3.5h3.2l1.6 4.2-2.1 1.3a11 11 0 0 0 5.3 5.3l1.3-2.1 4.2 1.6V17a2 2 0 0 1-2 2A15.5 15.5 0 0 1 3 5.5a2 2 0 0 1 2-2z"

@@ -1,14 +1,11 @@
 import { PMTiles } from 'pmtiles';
-import type { AddProtocolAction } from 'maplibre-gl';
 import { PUBLIC_SUPABASE_URL, PUBLIC_TILES_BASE_URL } from '$app/env/public';
-import { archiveForTile, isTileManifest, type TileManifest } from '#lib/domain/tile-manifest.js';
-
-export const TILE_PROTOCOL = 'daily-tiles';
-export const TILE_URL_TEMPLATE = `${TILE_PROTOCOL}://{z}/{x}/{y}`;
+import { isTileManifest, type TileManifest } from '#lib/domain/tile-manifest.js';
+import type { FetchTile } from './tile-protocol.ts';
 
 const TILES_BASE_URL = PUBLIC_TILES_BASE_URL || `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/tiles`;
 const MANIFEST_STORAGE_KEY = 'daily.tiles.manifest';
-const EMPTY_TILE = new ArrayBuffer(0);
+const MANIFEST_TIMEOUT_MS = 8000;
 
 function readCachedManifest(): TileManifest | null {
 	try {
@@ -19,44 +16,51 @@ function readCachedManifest(): TileManifest | null {
 	}
 }
 
-/** Latest tile manifest, or the last one seen when offline. Null if the map has never loaded. */
-export async function loadTileManifest(): Promise<TileManifest | null> {
+async function fetchManifest(): Promise<TileManifest | null> {
 	try {
-		const response = await fetch(`${TILES_BASE_URL}/manifest.json`, { cache: 'no-cache' });
-		if (response.ok) {
-			const manifest: unknown = await response.json();
-			if (isTileManifest(manifest)) {
-				localStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
-				return manifest;
-			}
-		}
+		const response = await fetch(`${TILES_BASE_URL}/manifest.json`, {
+			cache: 'no-cache',
+			signal: AbortSignal.timeout(MANIFEST_TIMEOUT_MS)
+		});
+		if (!response.ok) return null;
+		const manifest: unknown = await response.json();
+		if (!isTileManifest(manifest)) return null;
+		localStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
+		return manifest;
 	} catch {
-		// Offline or unreachable: use the cached manifest below.
+		return null; // offline, slow or unreachable
 	}
-	return readCachedManifest();
 }
 
-/** MapLibre protocol that reads each z/x/y tile from the archive the manifest assigns it to. */
-export function createTileProtocol(manifest: TileManifest): AddProtocolAction {
-	const archives = new Map<string, PMTiles>();
-
-	function archive(file: string): PMTiles {
-		const url = `${TILES_BASE_URL}/${manifest.build}/${file}`;
-		let pmtiles = archives.get(url);
-		if (!pmtiles) {
-			pmtiles = new PMTiles(url);
-			archives.set(url, pmtiles);
-		}
-		return pmtiles;
+/**
+ * The tile manifest, without waiting on the network when one is already known:
+ * the map opens at once from the cached copy and the next opening uses any newer build.
+ */
+export async function loadTileManifest(): Promise<TileManifest | null> {
+	const cached = readCachedManifest();
+	if (cached) {
+		void fetchManifest();
+		return cached;
 	}
+	return fetchManifest();
+}
 
-	return async ({ url }, abortController) => {
-		const match = /^daily-tiles:\/\/(\d+)\/(\d+)\/(\d+)$/.exec(url);
-		if (!match) throw new Error(`Unexpected tile URL: ${url}`);
-		const [z, x, y] = match.slice(1).map(Number);
-		const file = archiveForTile(manifest, z, x, y);
-		if (!file) return { data: EMPTY_TILE };
-		const tile = await archive(file).getZxy(z, x, y, abortController.signal);
-		return { data: tile?.data ?? EMPTY_TILE };
+/** The newest manifest, for downloads that should use the current build. */
+export async function freshTileManifest(): Promise<TileManifest | null> {
+	return (await fetchManifest()) ?? readCachedManifest();
+}
+
+/** Reads single tiles from the build's archives with HTTP range requests. */
+export function pmtilesFetcher(manifest: TileManifest): FetchTile {
+	const archives = new Map<string, PMTiles>();
+	return async (file, z, x, y, signal) => {
+		const url = `${TILES_BASE_URL}/${manifest.build}/${file}`;
+		let archive = archives.get(url);
+		if (!archive) {
+			archive = new PMTiles(url);
+			archives.set(url, archive);
+		}
+		const tile = await archive.getZxy(z, x, y, signal);
+		return tile?.data ?? null;
 	};
 }

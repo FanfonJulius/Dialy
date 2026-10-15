@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { StoredNetwork } from '#lib/data/local/db.js';
-	import { fillUssdTemplate, ussdTelHref } from '#lib/domain/ussd.js';
+	import { fillUssdTemplate, ussdSegments, ussdTelHref } from '#lib/domain/ussd.js';
 	import {
 		amountIssue,
 		codeIssue,
@@ -47,6 +47,18 @@
 	// One id per USSD string: dialing or copying the same withdrawal twice records it once.
 	const clientUuid = $derived(ussd ? crypto.randomUUID() : null);
 	const canAddPoint = $derived(pointId !== null || geolocation.fix !== null);
+	const segments = $derived(network.withdrawalTemplate ? ussdSegments(network.withdrawalTemplate) : []);
+	// What is dialed before the agent code, e.g. `*126*16*` (MTN) or `#150*14*` (Orange).
+	const codePrefix = $derived(segments[0]?.kind === 'text' && segments[1]?.kind === 'code' ? segments[0].value : '');
+	const BLANK = '····';
+	// The dial line as it fills in, e.g. `*126*16*` + typed code + `*` + typed amount + `#`.
+	const previewParts = $derived(
+		segments.map((segment) => {
+			if (segment.kind === 'text') return { text: segment.value, blank: false };
+			const typed = segment.kind === 'code' ? code : amountText;
+			return typed ? { text: typed, blank: false } : { text: BLANK, blank: true };
+		})
+	);
 
 	$effect(() => {
 		void ussd;
@@ -105,24 +117,31 @@
 	{#if editableCode}
 		<div class="flex flex-col gap-2">
 			<label for="{id}-code" class="text-sm font-medium text-fg">{m.withdraw_code()}</label>
-			<input
-				id="{id}-code"
-				class="rounded-xl border bg-surface px-4 py-3 font-mono text-xl tracking-wider text-fg outline-none focus:border-primary {attempted &&
+			<div
+				class="flex items-center rounded-xl border bg-surface font-mono text-xl tracking-wider focus-within:border-primary {attempted &&
 				codeProblem
 					? 'border-danger'
 					: 'border-border'}"
-				type="text"
-				inputmode="numeric"
-				autocomplete="off"
-				maxlength={MAX_CODE_DIGITS}
-				aria-invalid={attempted && codeProblem ? true : undefined}
-				aria-describedby={attempted && codeProblem ? `${id}-code-error` : undefined}
-				value={code}
-				oninput={(event) => {
-					code = event.currentTarget.value.replace(/\D/g, '').slice(0, MAX_CODE_DIGITS);
-					event.currentTarget.value = code;
-				}}
-			/>
+			>
+				{#if codePrefix}
+					<span class="pl-4 text-fg-muted" aria-hidden="true">{codePrefix}</span>
+				{/if}
+				<input
+					id="{id}-code"
+					class="min-w-0 flex-1 bg-transparent py-3 pr-4 text-fg outline-none {codePrefix ? 'pl-0.5' : 'pl-4'}"
+					type="text"
+					inputmode="numeric"
+					autocomplete="off"
+					maxlength={MAX_CODE_DIGITS}
+					aria-invalid={attempted && codeProblem ? true : undefined}
+					aria-describedby={attempted && codeProblem ? `${id}-code-error` : undefined}
+					value={code}
+					oninput={(event) => {
+						code = event.currentTarget.value.replace(/\D/g, '').slice(0, MAX_CODE_DIGITS);
+						event.currentTarget.value = code;
+					}}
+				/>
+			</div>
 			{#if attempted && codeProblem}
 				<p id="{id}-code-error" class="text-sm text-danger">{codeMessages[codeProblem]()}</p>
 			{/if}
@@ -138,9 +157,12 @@
 	{#if !network.withdrawalTemplate}
 		<p class="rounded-xl bg-surface-2 px-4 py-3 text-sm text-fg" role="alert">{m.withdraw_no_template()}</p>
 	{:else}
-		<div class="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3">
+		<div class="flex flex-col gap-1 rounded-xl bg-surface-2 px-4 py-3">
 			<span class="text-sm text-fg-muted">{m.withdraw_ussd()}</span>
-			<span class="font-mono text-base font-semibold break-all text-fg" aria-live="polite">{ussd ?? '—'}</span>
+			<span class="font-mono text-lg font-semibold break-all text-fg" aria-live="polite"
+				>{#each previewParts as part, index (index)}<span class={part.blank ? 'text-fg-muted' : ''}>{part.text}</span
+					>{/each}</span
+			>
 		</div>
 
 		{#if !canAddPoint}

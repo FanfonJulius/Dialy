@@ -27,6 +27,17 @@ export function formatAmount(amount: number, locale: string): string {
 	}).format(amount);
 }
 
+/** "850 kB", "12.5 MB" / "12,5 Mo". */
+export function formatBytes(bytes: number, locale: string): string {
+	const megabytes = bytes / 1_000_000;
+	const [value, unit] = megabytes >= 1 ? [megabytes, 'megabyte'] : [Math.max(1, bytes / 1000), 'kilobyte'];
+	return new Intl.NumberFormat(intlLocale(locale), {
+		style: 'unit',
+		unit,
+		maximumFractionDigits: value < 10 ? 1 : 0
+	}).format(value);
+}
+
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 	['year', 365 * 24 * 3600],
 	['month', 30 * 24 * 3600],

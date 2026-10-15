@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable, type Table } from 'dexie';
+import type { Bounds } from '#lib/domain/geo.js';
 import type { CashPoint } from '#lib/domain/points.js';
 import type { WithdrawalRequest } from '#lib/domain/withdrawal.js';
 
@@ -44,6 +45,31 @@ export type OutboxEntry =
 	| (OutboxBase & { kind: 'withdrawal'; request: WithdrawalRequest })
 	| (OutboxBase & { kind: 'saved'; pointId: string; saved: boolean });
 
+/** A basemap tile kept on the device, keyed `z/x/y`. */
+export type StoredTile = {
+	key: string;
+	data: ArrayBuffer;
+	/** Tile build it came from; recently viewed tiles from an older build are fetched again online. */
+	build: string;
+	/** Offline areas using this tile; empty for tiles kept only because they were viewed recently. */
+	areas: string[];
+	/** 1 while any area uses the tile (IndexedDB cannot index booleans). */
+	pinned: 0 | 1;
+	storedAt: number;
+};
+
+export type OfflineArea = {
+	id: string;
+	name: string;
+	bounds: Bounds;
+	build: string;
+	createdAt: number;
+	updatedAt: number;
+	status: 'downloading' | 'ready' | 'incomplete';
+	tileCount: number;
+	bytes: number;
+};
+
 export class DailyDatabase extends Dexie {
 	points!: EntityTable<StoredPoint, 'id'>;
 	cells!: EntityTable<SyncCell, 'key'>;
@@ -51,6 +77,8 @@ export class DailyDatabase extends Dexie {
 	saved!: EntityTable<SavedPoint, 'pointId'>;
 	// A plain Table: EntityTable's insert type does not keep the entry union apart.
 	outbox!: Table<OutboxEntry, string>;
+	tiles!: EntityTable<StoredTile, 'key'>;
+	areas!: EntityTable<OfflineArea, 'id'>;
 
 	constructor(name = 'daily') {
 		super(name);
@@ -72,6 +100,10 @@ export class DailyDatabase extends Dexie {
 						network.withdrawalTemplate ??= null;
 					})
 			);
+		this.version(3).stores({
+			tiles: 'key, *areas, [pinned+storedAt]',
+			areas: 'id, createdAt'
+		});
 	}
 }
 

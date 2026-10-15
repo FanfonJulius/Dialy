@@ -17,7 +17,8 @@ export const LAYERS = {
 	userDot: 'daily-user-dot'
 } as const;
 
-const FONT = ['Noto Sans Medium'];
+// Available both in Daily's self-hosted fonts and on the fallback map's font server.
+const FONT = ['Noto Sans Regular'];
 const CLUSTER_MAX_ZOOM = 15;
 
 export type OverlayColors = { mtn: string; orange: string; ink: string; location: string; surface: string };

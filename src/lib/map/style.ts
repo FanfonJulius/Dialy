@@ -9,13 +9,29 @@ export type BasemapTiles = { url: string; maxZoom: number; attribution: string }
 type StyleOptions = {
 	theme: ResolvedTheme;
 	locale: string;
-	/** Null when no tile manifest is available yet: points still show on a plain background. */
+	/** Null when no tile manifest is available yet. */
 	tiles: BasemapTiles | null;
+	/** Online map used when Daily's own tiles are missing; points then show on top of it. */
+	fallback?: StyleSpecification | null;
 	overlaySources: Record<string, SourceSpecification>;
 	overlayLayers: LayerSpecification[];
 };
 
-export function buildStyle({ theme, locale, tiles, overlaySources, overlayLayers }: StyleOptions): StyleSpecification {
+export function buildStyle({
+	theme,
+	locale,
+	tiles,
+	fallback,
+	overlaySources,
+	overlayLayers
+}: StyleOptions): StyleSpecification {
+	if (!tiles && fallback) {
+		return {
+			...fallback,
+			sources: { ...fallback.sources, ...overlaySources },
+			layers: [...fallback.layers, ...overlayLayers]
+		};
+	}
 	const flavor = namedFlavor(theme);
 	// Fonts and sprites are self-hosted in static/map so labels render offline.
 	const origin = window.location.origin;

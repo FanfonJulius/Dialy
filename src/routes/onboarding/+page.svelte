@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { geolocation, type LocationStatus } from '#lib/location/geolocation.svelte.js';
@@ -20,6 +21,16 @@
 	let busy = $state(false);
 	const current = $derived(STEPS[step]);
 	const isLast = $derived(step === STEPS.length - 1);
+
+	// Permission given before (another visit, the browser settings): no need to ask again.
+	onMount(async () => {
+		try {
+			const permission = await navigator.permissions?.query({ name: 'geolocation' });
+			if (permission?.state === 'granted') locationStatus = 'active';
+		} catch {
+			// Permissions API unavailable: the button asks when tapped.
+		}
+	});
 
 	async function allowLocation(): Promise<void> {
 		busy = true;

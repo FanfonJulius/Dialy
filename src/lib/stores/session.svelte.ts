@@ -7,6 +7,8 @@ import { parseStoredSession, type SignedInUser } from '#lib/domain/session.js';
 export type SignUpResult = AuthErrorKey | 'confirmation_pending' | null;
 export type DeleteAccountResult = 'offline' | 'failed' | null;
 
+const SESSION_TIMEOUT_MS = 4000;
+
 function toUser(session: Session): SignedInUser {
 	return { id: session.user.id, email: session.user.email ?? null };
 }
@@ -29,17 +31,27 @@ class SessionStore {
 	}
 
 	async #load(): Promise<void> {
-		const { data, error } = await supabase.auth.getSession();
+		supabase.auth.onAuthStateChange((event, session) => {
+			if (session) this.user = toUser(session);
+			else if (event === 'SIGNED_OUT') this.#signedOut();
+		});
+		// An expired token is refreshed over the network; on a weak connection the app must not wait for it.
+		const timedOut = Symbol('timed out');
+		const result = await Promise.race([
+			supabase.auth.getSession(),
+			new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), SESSION_TIMEOUT_MS))
+		]);
+		if (result === timedOut) {
+			this.user ??= storedSessionUser();
+			return;
+		}
+		const { data, error } = result;
 		if (data.session) {
 			this.user = toUser(data.session);
 		} else if (error && isAuthRetryableFetchError(error)) {
 			// Offline with an expired access token: supabase-js keeps the refresh token and retries later.
 			this.user = storedSessionUser();
 		}
-		supabase.auth.onAuthStateChange((event, session) => {
-			if (session) this.user = toUser(session);
-			else if (event === 'SIGNED_OUT') this.#signedOut();
-		});
 	}
 
 	async signIn(email: string, password: string): Promise<AuthErrorKey | 'confirmation_pending' | null> {

@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { m } from '#lib/paraglide/messages.js';
 	import AccountSection from '#lib/features/profile/AccountSection.svelte';
 	import LanguageSwitcher from '#lib/features/profile/LanguageSwitcher.svelte';
 	import ThemeSwitcher from '#lib/features/profile/ThemeSwitcher.svelte';
+	import Icon from '#lib/ui/Icon.svelte';
 </script>
 
 <section class="mx-auto flex w-full max-w-md flex-col gap-6 p-4">
@@ -11,5 +13,12 @@
 		<LanguageSwitcher />
 		<ThemeSwitcher />
 	</div>
+	<a
+		href={resolve('/(app)/profile/areas')}
+		class="flex items-center gap-3 rounded-2xl bg-surface p-4 font-semibold text-fg"
+	>
+		<Icon name="download" class="size-5 text-fg-muted" />
+		{m.profile_offline_areas()}
+	</a>
 	<AccountSection />
 </section>
