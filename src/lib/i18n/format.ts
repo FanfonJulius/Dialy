@@ -27,6 +27,11 @@ export function formatAmount(amount: number, locale: string): string {
 	}).format(amount);
 }
 
+/** "654 57 19 14": a Cameroonian mobile number in the groups people read it in. */
+export function formatPhoneNumber(number: string): string {
+	return number.replace(/^(\d{3})(\d{2})(\d{2})(\d{2})$/, '$1\u00a0$2\u00a0$3\u00a0$4');
+}
+
 /** "850 kB", "12.5 MB" / "12,5 Mo". */
 export function formatBytes(bytes: number, locale: string): string {
 	const megabytes = bytes / 1_000_000;

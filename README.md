@@ -35,6 +35,8 @@ Migrations live in `supabase/migrations/`; database tests in `supabase/tests/`.
 USSD formats are rows in `ussd_templates` (placeholders `{code}` and `{amount}`), and code formats and amount limits
 are columns on `networks`. Edit them in the dashboard to change behaviour without an app release.
 
+The Donations tab's numbers and transfer codes are in `src/lib/domain/donation.ts` (changing them needs a release).
+
 ## Deploy (Vercel)
 
 `vercel.json` builds with `npm run build`, serves `build/`, rewrites every route to the SPA shell and sets security

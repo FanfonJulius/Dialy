@@ -3,6 +3,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { outbox } from '#lib/stores/outbox.svelte.js';
 	import { session, type DeleteAccountResult } from '#lib/stores/session.svelte.js';
+	import { fitText } from '#lib/ui/fit-text.js';
 
 	let dialog: HTMLDialogElement;
 	let busy = $state(false);
@@ -27,7 +28,11 @@
 <section class="flex flex-col gap-4 rounded-2xl bg-surface p-4" aria-labelledby="account-title">
 	<h2 id="account-title" class="text-base font-semibold text-fg">{m.profile_account()}</h2>
 	{#if session.user?.email}
-		<p class="text-sm break-all text-fg-muted">{m.profile_signed_in_as({ email: session.user.email })}</p>
+		{@const email = session.user.email}
+		<div class="flex flex-col gap-0.5">
+			<p class="text-sm text-fg-muted">{m.profile_signed_in_as()}</p>
+			<p class="text-base font-semibold text-fg" {@attach fitText(email)}>{email}</p>
+		</div>
 	{/if}
 	<button
 		type="button"

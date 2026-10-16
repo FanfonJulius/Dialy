@@ -14,8 +14,8 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { outbox } from '#lib/stores/outbox.svelte.js';
+	import AmountField from '#lib/ui/AmountField.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
-	import AmountField from './AmountField.svelte';
 
 	type Props = {
 		network: StoredNetwork;

@@ -5,7 +5,7 @@
 	import Icon, { type IconName } from '#lib/ui/Icon.svelte';
 
 	type Tab = {
-		routeId: '/(app)' | '/(app)/saved' | '/(app)/profile';
+		routeId: '/(app)' | '/(app)/saved' | '/(app)/donations' | '/(app)/profile';
 		label: () => string;
 		icon: IconName;
 	};
@@ -13,6 +13,7 @@
 	const tabs: readonly Tab[] = [
 		{ routeId: '/(app)', label: m.nav_map, icon: 'map' },
 		{ routeId: '/(app)/saved', label: m.nav_saved, icon: 'bookmark' },
+		{ routeId: '/(app)/donations', label: m.nav_donations, icon: 'heart' },
 		{ routeId: '/(app)/profile', label: m.nav_profile, icon: 'user' }
 	];
 
@@ -23,7 +24,7 @@
 </script>
 
 <nav aria-label={m.nav_label()} class="sticky bottom-0 border-t border-border bg-surface">
-	<ul class="mx-auto grid max-w-md grid-cols-3 pb-[env(safe-area-inset-bottom)]">
+	<ul class="mx-auto grid max-w-md grid-cols-4 pb-[env(safe-area-inset-bottom)]">
 		{#each tabs as tab (tab.routeId)}
 			{@const active = isActive(tab)}
 			<li>
