@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, formatBytes, formatPhoneNumber } from './format.ts';
+import { formatAmount, formatBytes, formatDateTime, formatDuration, formatPhoneNumber } from './format.ts';
+
+describe('formatDuration', () => {
+	it('rounds to whole minutes, never below one', () => {
+		expect(formatDuration(180, 'en')).toMatch(/^3 mins?$/);
+		expect(formatDuration(20, 'fr')).toBe('1\u00a0min');
+		expect(formatDuration(4500, 'en')).toMatch(/^75 mins?$/);
+	});
+});
+
+describe('formatDateTime', () => {
+	it('shows the day and the time', () => {
+		expect(formatDateTime('2026-10-17T14:30:00.000Z', 'en')).toMatch(/^17 Oct 2026, \d{2}:30$/);
+		expect(formatDateTime('2026-10-17T14:30:00.000Z', 'fr')).toMatch(/^17 oct\. 2026, \d{2}:30$/);
+	});
+});
 
 describe('formatPhoneNumber', () => {
 	it('groups Cameroonian mobile numbers so they are easy to read', () => {

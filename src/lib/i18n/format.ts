@@ -32,6 +32,18 @@ export function formatPhoneNumber(number: string): string {
 	return number.replace(/^(\d{3})(\d{2})(\d{2})(\d{2})$/, '$1\u00a0$2\u00a0$3\u00a0$4');
 }
 
+/** "3 min", rounded to whole minutes and never below one. */
+export function formatDuration(seconds: number, locale: string): string {
+	return new Intl.NumberFormat(intlLocale(locale), { style: 'unit', unit: 'minute' }).format(
+		Math.max(1, Math.round(seconds / 60))
+	);
+}
+
+/** "17 Oct 2026, 14:30" / "17 oct. 2026, 14:30", in the phone's time zone. */
+export function formatDateTime(iso: string, locale: string): string {
+	return new Intl.DateTimeFormat(intlLocale(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+}
+
 /** "850 kB", "12.5 MB" / "12,5 Mo". */
 export function formatBytes(bytes: number, locale: string): string {
 	const megabytes = bytes / 1_000_000;

@@ -14,10 +14,12 @@
 		network: StoredNetwork | undefined;
 		networkName: string;
 		distanceM: number | null;
+		/** Shows the walking route; null when the point is close by or already routed to. */
+		ondirections: (() => void) | null;
 		onclose: () => void;
 	};
 
-	let { point, network, networkName, distanceM, onclose }: Props = $props();
+	let { point, network, networkName, distanceM, ondirections, onclose }: Props = $props();
 
 	const locale = getLocale();
 	const isSaved = $derived(saved.ids.has(point.id));
@@ -63,6 +65,17 @@
 			<li>{m.point_last_used({ time: formatRelativeTime(point.lastWithdrawalAt, locale) })}</li>
 		{/if}
 	</ul>
+
+	{#if ondirections}
+		<button
+			type="button"
+			class="mb-4 flex items-center gap-2 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary-ink"
+			onclick={ondirections}
+		>
+			<Icon name="directions" class="size-5" />
+			{m.map_directions()}
+		</button>
+	{/if}
 
 	{#if network}
 		<!-- Keyed by point so an amount typed for one agent never carries over to another. -->

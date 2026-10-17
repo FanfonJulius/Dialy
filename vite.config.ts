@@ -17,12 +17,14 @@ function origin(url: string | undefined): Origin[] {
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), 'PUBLIC_');
-	// Only the project's own Supabase and tile origins, plus the fallback map (src/lib/map/fallback-style.ts).
+	// Only the project's own Supabase and tile origins, the fallback map (src/lib/map/fallback-style.ts)
+	// and the walking-route service (src/lib/data/routing/walking-route.ts).
 	const connect = [
 		...new Set([
 			...origin(env.PUBLIC_SUPABASE_URL),
 			...origin(env.PUBLIC_TILES_BASE_URL),
-			...origin('https://tiles.openfreemap.org')
+			...origin('https://tiles.openfreemap.org'),
+			...origin('https://routing.openstreetmap.de')
 		])
 	];
 	// End-to-end builds use a fake backend and must never replace the real build output.

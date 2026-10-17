@@ -1,13 +1,18 @@
-import type { FeatureCollection, Point, Polygon } from 'geojson';
+import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import type { ExpressionSpecification, LayerSpecification, SourceSpecification } from 'maplibre-gl';
 import { circleRing } from '#lib/domain/geo.js';
 import type { Fix } from '#lib/domain/location.js';
 import type { CashPoint } from '#lib/domain/points.js';
+import type { Position } from '#lib/domain/route.js';
 
 export const POINTS_SOURCE = 'daily-points';
 export const USER_SOURCE = 'daily-user';
+export const ROUTE_SOURCE = 'daily-route';
 
 export const LAYERS = {
+	routeCasing: 'daily-route-casing',
+	route: 'daily-route',
+	routeStraight: 'daily-route-straight',
 	clusters: 'daily-clusters',
 	clusterCount: 'daily-cluster-count',
 	points: 'daily-points',
@@ -21,7 +26,15 @@ export const LAYERS = {
 const FONT = ['Noto Sans Regular'];
 const CLUSTER_MAX_ZOOM = 15;
 
-export type OverlayColors = { mtn: string; orange: string; ink: string; location: string; surface: string };
+export type OverlayColors = {
+	mtn: string;
+	orange: string;
+	ink: string;
+	location: string;
+	surface: string;
+	primary: string;
+	primaryInk: string;
+};
 
 /** Map colours come from the same CSS tokens as the rest of the UI. */
 export function readOverlayColors(): OverlayColors {
@@ -32,7 +45,9 @@ export function readOverlayColors(): OverlayColors {
 		orange: token('net-orange'),
 		ink: token('on-network'),
 		location: token('location'),
-		surface: token('surface')
+		surface: token('surface'),
+		primary: token('primary'),
+		primaryInk: token('primary-ink')
 	};
 }
 
@@ -60,11 +75,31 @@ export function userGeoJson(fix: Fix | null): FeatureCollection<Point | Polygon>
 	};
 }
 
+/** `straight` when no route could be fetched and the line only points the way. */
+export type RouteLine = { path: Position[]; straight: boolean };
+type RouteProperties = { straight: boolean };
+
+export function routeGeoJson(route: RouteLine | null): FeatureCollection<LineString, RouteProperties> {
+	if (!route || route.path.length < 2) return { type: 'FeatureCollection', features: [] };
+	return {
+		type: 'FeatureCollection',
+		features: [
+			{
+				type: 'Feature',
+				geometry: { type: 'LineString', coordinates: route.path },
+				properties: { straight: route.straight }
+			}
+		]
+	};
+}
+
 export function overlaySources(
 	points: FeatureCollection<Point, PointProperties>,
-	user: FeatureCollection<Point | Polygon>
+	user: FeatureCollection<Point | Polygon>,
+	route: FeatureCollection<LineString, RouteProperties>
 ): Record<string, SourceSpecification> {
 	return {
+		[ROUTE_SOURCE]: { type: 'geojson', data: route },
 		[POINTS_SOURCE]: {
 			type: 'geojson',
 			data: points,
@@ -95,6 +130,9 @@ export function overlayLayers(colors: OverlayColors, selectedId: string | null):
 		colors.surface
 	];
 	const unclustered: ExpressionSpecification = ['!', ['has', 'point_count']];
+	const straight: ExpressionSpecification = ['==', ['get', 'straight'], true];
+	const followsRoads: ExpressionSpecification = ['!=', ['get', 'straight'], true];
+	const rounded = { 'line-join': 'round', 'line-cap': 'round' } as const;
 	return [
 		{
 			id: LAYERS.accuracy,
@@ -102,6 +140,30 @@ export function overlayLayers(colors: OverlayColors, selectedId: string | null):
 			source: USER_SOURCE,
 			filter: ['==', ['geometry-type'], 'Polygon'],
 			paint: { 'fill-color': colors.location, 'fill-opacity': 0.15, 'fill-outline-color': colors.location }
+		},
+		{
+			id: LAYERS.routeCasing,
+			type: 'line',
+			source: ROUTE_SOURCE,
+			filter: followsRoads,
+			layout: rounded,
+			paint: { 'line-color': colors.primaryInk, 'line-width': 9 }
+		},
+		{
+			id: LAYERS.route,
+			type: 'line',
+			source: ROUTE_SOURCE,
+			filter: followsRoads,
+			layout: rounded,
+			paint: { 'line-color': colors.primary, 'line-width': 5 }
+		},
+		{
+			id: LAYERS.routeStraight,
+			type: 'line',
+			source: ROUTE_SOURCE,
+			filter: straight,
+			layout: rounded,
+			paint: { 'line-color': colors.primaryInk, 'line-width': 4, 'line-dasharray': [0.5, 2] }
 		},
 		{
 			id: LAYERS.clusters,

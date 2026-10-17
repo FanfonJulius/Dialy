@@ -3,7 +3,7 @@ import type { Bounds } from './tiles.ts';
 export type LatLng = { lat: number; lng: number };
 export type { Bounds };
 
-const EARTH_RADIUS_M = 6_371_008.8;
+export const EARTH_RADIUS_M = 6_371_008.8;
 
 function toRadians(degrees: number): number {
 	return (degrees * Math.PI) / 180;

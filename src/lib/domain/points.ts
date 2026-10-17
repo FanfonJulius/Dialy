@@ -13,7 +13,7 @@ export type CashPoint = {
 	updatedAt: string;
 };
 
-const pointFields = {
+export const pointFields = {
 	network_id: v.pipe(v.string(), v.regex(/^[a-z][a-z0-9_]{1,31}$/)),
 	code: v.pipe(v.string(), v.regex(/^[0-9]{1,32}$/)),
 	lat: v.pipe(v.number(), v.minValue(-90), v.maxValue(90)),
@@ -36,7 +36,7 @@ const SavedRowSchema = v.object({
 	...pointFields
 });
 
-function toCashPoint(id: string, row: v.InferOutput<v.ObjectSchema<typeof pointFields, undefined>>): CashPoint {
+export function toCashPoint(id: string, row: v.InferOutput<v.ObjectSchema<typeof pointFields, undefined>>): CashPoint {
 	return {
 		id,
 		network: row.network_id,

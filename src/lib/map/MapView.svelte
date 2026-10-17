@@ -5,6 +5,7 @@
 	import type { Bounds, LatLng } from '#lib/domain/geo.js';
 	import type { Fix } from '#lib/domain/location.js';
 	import type { CashPoint } from '#lib/domain/points.js';
+	import type { Position } from '#lib/domain/route.js';
 	import type { ResolvedTheme } from '#lib/domain/theme.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -13,32 +14,49 @@
 	import {
 		LAYERS,
 		POINTS_SOURCE,
+		ROUTE_SOURCE,
 		USER_SOURCE,
 		overlayLayers,
 		overlaySources,
 		pointsGeoJson,
 		readOverlayColors,
+		routeGeoJson,
 		selectedFilter,
-		userGeoJson
+		userGeoJson,
+		type RouteLine
 	} from './overlays.ts';
 	import { buildStyle, type BasemapTiles } from './style.ts';
 	import { loadFallbackStyle } from './fallback-style.ts';
 	import { TILE_PROTOCOL, TILE_URL_TEMPLATE, createTileProtocol } from './tile-protocol.ts';
 	import { loadTileManifest, pmtilesFetcher } from './tile-source.ts';
+	import { zoomGesture } from './zoom-gesture.ts';
 	import { tileStore } from '#lib/data/local/tile-store.js';
 
 	type Props = {
 		points: readonly CashPoint[];
 		fix: Fix | null;
 		selectedId: string | null;
+		route?: RouteLine | null;
 		/** Height in pixels of the panels covering the bottom of the map; map credits stay above them. */
 		bottomInset?: number;
 		onselect: (id: string | null) => void;
 		onmoveend: (bounds: Bounds) => void;
 		ondragstart?: () => void;
+		/** The user zoomed in or out (pinch, double tap, wheel or keys); not called for moves made by the app. */
+		onzoom?: (direction: 'in' | 'out') => void;
 	};
 
-	let { points, fix, selectedId, bottomInset = 0, onselect, onmoveend, ondragstart }: Props = $props();
+	let {
+		points,
+		fix,
+		selectedId,
+		route = null,
+		bottomInset = 0,
+		onselect,
+		onmoveend,
+		ondragstart,
+		onzoom
+	}: Props = $props();
 
 	const CAMERA_KEY = 'daily.camera';
 	const POINTS_UPDATE_MS = 150;
@@ -89,7 +107,7 @@
 			locale: getLocale(),
 			tiles,
 			fallback,
-			overlaySources: overlaySources(pointsGeoJson(points), userGeoJson(fix)),
+			overlaySources: overlaySources(pointsGeoJson(points), userGeoJson(fix), routeGeoJson(route)),
 			overlayLayers: overlayLayers(readOverlayColors(), selectedId)
 		});
 	}
@@ -108,6 +126,21 @@
 			return;
 		}
 		map.flyTo({ center: [target.lng, target.lat], zoom: zoom ?? Math.max(map.getZoom(), 15), essential: true });
+	}
+
+	/** Frames a route, keeping it clear of the panels over the map. */
+	export function fitPath(path: readonly Position[], padding: { top: number; bottom: number }): void {
+		if (!map || path.length === 0) return;
+		const lngs = path.map(([lng]) => lng);
+		const lats = path.map(([, lat]) => lat);
+		const side = 32;
+		map.fitBounds(
+			[
+				[Math.min(...lngs), Math.min(...lats)],
+				[Math.max(...lngs), Math.max(...lats)]
+			],
+			{ padding: { top: padding.top + side, bottom: padding.bottom + side, left: side, right: side }, maxZoom: 17 }
+		);
 	}
 
 	onMount(() => {
@@ -167,6 +200,20 @@
 				instance.on('mouseleave', layer, () => (instance!.getCanvas().style.cursor = ''));
 			}
 			instance.on('dragstart', () => ondragstart?.());
+			// Only zooming done by the user (its events carry the input event) counts, also when it
+			// interrupts one of the app's own camera moves.
+			let zoomBefore = instance.getZoom();
+			let gestureStartZoom: number | null = null;
+			instance.on('zoom', (event) => {
+				if (event.originalEvent && gestureStartZoom === null) gestureStartZoom = zoomBefore;
+				zoomBefore = instance!.getZoom();
+			});
+			instance.on('zoomend', () => {
+				if (gestureStartZoom === null) return;
+				const direction = zoomGesture(gestureStartZoom, instance!.getZoom());
+				gestureStartZoom = null;
+				if (direction) onzoom?.(direction);
+			});
 			instance.on('moveend', () => {
 				const target = instance!;
 				const center = target.getCenter();
@@ -220,6 +267,11 @@
 	$effect(() => {
 		const data = userGeoJson(fix);
 		map?.getSource<GeoJSONSource>(USER_SOURCE)?.setData(data);
+	});
+
+	$effect(() => {
+		const data = routeGeoJson(route);
+		map?.getSource<GeoJSONSource>(ROUTE_SOURCE)?.setData(data);
 	});
 
 	$effect(() => {

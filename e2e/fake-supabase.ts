@@ -32,6 +32,9 @@ type PointRow = {
 
 export type RecordedWithdrawal = Record<string, unknown>;
 
+/** A withdrawal as the server keeps it for its user's history. */
+export type HistoryRow = { client_uuid: string; amount: number; captured_at: string; point_id: string };
+
 const PAST = '2026-10-01T08:00:00.000Z';
 
 function base64url(value: object): string {
@@ -55,6 +58,8 @@ export class FakeSupabase {
 	];
 	saved = new Map<string, string>();
 	withdrawals: RecordedWithdrawal[] = [];
+	/** The user's withdrawals on the server, e.g. made on another phone. */
+	history: HistoryRow[] = [];
 	/** When true, API calls fail as if the server could not be reached. */
 	unreachable = false;
 	/** When true, a basemap is published (manifest and tile archive); otherwise the map has no tiles. */
@@ -164,6 +169,19 @@ export class FakeSupabase {
 				})
 			);
 		}
+		if (path === '/rest/v1/rpc/my_withdrawals') {
+			return json(
+				200,
+				this.history
+					.toSorted((a, b) => b.captured_at.localeCompare(a.captured_at))
+					.flatMap((row) => {
+						const point = this.points.find((p) => p.id === row.point_id);
+						if (!point) return [];
+						const { id, ...fields } = point;
+						return [{ ...row, point_id: id, ...fields }];
+					})
+			);
+		}
 		if (path === '/rest/v1/saved_points' && request.method() === 'POST') {
 			this.saved.set(String(body.point_id), new Date().toISOString());
 			return route.fulfill({ status: 201 });
@@ -213,10 +231,18 @@ export class FakeSupabase {
 		point ??= location
 			? this.points.find((p) => p.network_id === body.p_network_id && p.code === body.p_code && distanceM(p, location) <= 300)
 			: undefined;
+		const remember = (pointId: string) =>
+			this.history.push({
+				client_uuid: String(body.p_client_uuid),
+				amount: Number(body.p_amount),
+				captured_at: typeof body.p_captured_at === 'string' ? body.p_captured_at : now,
+				point_id: pointId
+			});
 		if (point) {
 			point.withdrawal_count++;
 			point.last_withdrawal_at = now;
 			point.updated_at = now;
+			remember(point.id);
 			return { point_id: point.id, outcome: 'attached' };
 		}
 		const created: PointRow = {
@@ -232,6 +258,7 @@ export class FakeSupabase {
 			updated_at: now
 		};
 		this.points.push(created);
+		remember(created.id);
 		return { point_id: created.id, outcome: 'created' };
 	}
 }

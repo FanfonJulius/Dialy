@@ -61,7 +61,8 @@ describe('anonymous users', () => {
 		'select * from public.nearby_points(4.05, 9.76)',
 		`select * from public.record_withdrawal('${randomUUID()}', 'mtn', '54321', 5000, 4.05, 9.76, 10)`,
 		'select public.delete_my_account()',
-		'select * from public.my_saved_points()'
+		'select * from public.my_saved_points()',
+		'select * from public.my_withdrawals()'
 	])('cannot call %s', async (sql) => {
 		await actAs(db, null);
 		expectPermissionDenied((await attempt(db, sql)).error);
@@ -191,6 +192,31 @@ describe('private data', () => {
 
 		await actAs(db, alice);
 		expect((await db.query('select * from public.my_saved_points()')).rows).toHaveLength(0);
+	});
+
+	it("lists only the caller's withdrawals, with their points, newest first", async () => {
+		const pointId = await createPoint(alice, '11111');
+		await createPoint(bob, '22222');
+		await actAs(db, alice);
+		await db.query(
+			`select * from public.record_withdrawal(
+				p_client_uuid => $1, p_network_id => 'mtn', p_code => '11111', p_amount => 2000,
+				p_point_id => $2, p_captured_at => now() - interval '1 hour')`,
+			[randomUUID(), pointId]
+		);
+
+		const { rows } = await db.query<{ amount: number; code: string; point_id: string; lat: number; status: string }>(
+			'select amount, code, point_id, lat, status from public.my_withdrawals()'
+		);
+		expect(rows.map((row) => [row.amount, row.code, row.point_id, row.status])).toEqual([
+			[5000, '11111', pointId, 'active'],
+			[2000, '11111', pointId, 'active']
+		]);
+		expect(rows[0].lat).toBeCloseTo(DOUALA.lat, 5);
+
+		await actAs(db, bob);
+		const bobs = await db.query<{ code: string }>('select code from public.my_withdrawals()');
+		expect(bobs.rows).toEqual([{ code: '22222' }]);
 	});
 
 	it('creates a profile on sign-up that only its owner can read and change', async () => {

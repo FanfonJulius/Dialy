@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable, type Table } from 'dexie';
 import type { Bounds } from '#lib/domain/geo.js';
+import type { HistoryEntry } from '#lib/domain/history.js';
 import type { CashPoint } from '#lib/domain/points.js';
 import type { WithdrawalRequest } from '#lib/domain/withdrawal.js';
 
@@ -79,6 +80,7 @@ export class DailyDatabase extends Dexie {
 	outbox!: Table<OutboxEntry, string>;
 	tiles!: EntityTable<StoredTile, 'key'>;
 	areas!: EntityTable<OfflineArea, 'id'>;
+	history!: EntityTable<HistoryEntry, 'id'>;
 
 	constructor(name = 'daily') {
 		super(name);
@@ -104,6 +106,9 @@ export class DailyDatabase extends Dexie {
 			tiles: 'key, *areas, [pinned+storedAt]',
 			areas: 'id, createdAt'
 		});
+		this.version(4).stores({
+			history: 'id, userId, dialedAt'
+		});
 	}
 }
 
@@ -111,8 +116,9 @@ export const db = new DailyDatabase();
 
 /** Forgets everything tied to the signed-in account; public points stay cached. */
 export async function clearUserData(database: DailyDatabase): Promise<void> {
-	await database.transaction('rw', database.saved, database.outbox, async () => {
+	await database.transaction('rw', database.saved, database.outbox, database.history, async () => {
 		await database.saved.clear();
 		await database.outbox.clear();
+		await database.history.clear();
 	});
 }

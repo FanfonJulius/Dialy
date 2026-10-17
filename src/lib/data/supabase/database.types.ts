@@ -228,6 +228,16 @@ export type Database = {
 				Args: never;
 				Returns: (Omit<PointRow, 'id'> & { point_id: string; saved_at: string })[];
 			};
+			my_withdrawals: {
+				Args: never;
+				Returns: (Omit<PointRow, 'id'> & {
+					client_uuid: string;
+					amount: number;
+					captured_at: string;
+					point_id: string;
+					status: string;
+				})[];
+			};
 		};
 		Enums: { [_ in never]: never };
 		CompositeTypes: {

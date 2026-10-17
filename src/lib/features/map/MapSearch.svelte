@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { StoredNetwork } from '#lib/data/local/db.js';
 	import type { PointFilter } from '#lib/domain/points.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -48,20 +49,58 @@
 		{/if}
 	</label>
 
-	<div class="flex gap-2" role="radiogroup" aria-label={m.map_filter_label()}>
-		{#each chips as chip (chip.id)}
-			{@const checked = filter.network === chip.id}
-			<button
-				type="button"
-				role="radio"
-				aria-checked={checked}
-				class="rounded-full border px-3.5 py-1.5 text-sm font-medium shadow-sm {checked
-					? 'border-primary bg-primary text-on-primary'
-					: 'border-border bg-surface text-fg'}"
-				onclick={() => (filter = { ...filter, network: chip.id })}
-			>
-				{chip.label}
-			</button>
-		{/each}
+	<div class="flex items-center gap-2">
+		<!-- On narrow phones the chips scroll sideways instead of breaking onto two lines. -->
+		<div
+			class="chips -my-1 flex min-w-0 gap-2 overflow-x-auto py-1 [scrollbar-width:none]"
+			role="radiogroup"
+			aria-label={m.map_filter_label()}
+		>
+			{#each chips as chip (chip.id)}
+				{@const checked = filter.network === chip.id}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={checked}
+					class="rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap shadow-sm {checked
+						? 'border-primary bg-primary text-on-primary'
+						: 'border-border bg-surface text-fg'}"
+					onclick={() => (filter = { ...filter, network: chip.id })}
+				>
+					{chip.label}
+				</button>
+			{/each}
+		</div>
+		<a
+			href={resolve('/(app)/history')}
+			class="shrink-0 rounded-full border border-border bg-surface p-1.5 text-fg shadow-sm"
+			aria-label={m.history_title()}
+		>
+			<Icon name="history" class="size-5" />
+		</a>
 	</div>
 </div>
+
+<style>
+	/* While more chips are off to the right, the last visible one fades out (no fade when all fit). */
+	@property --chips-fade {
+		syntax: '<length>';
+		inherits: false;
+		initial-value: 0px;
+	}
+
+	.chips {
+		mask-image: linear-gradient(to right, #000 calc(100% - var(--chips-fade)), transparent);
+		animation: chips-fade linear both;
+		animation-timeline: scroll(self inline);
+	}
+
+	@keyframes chips-fade {
+		from {
+			--chips-fade: 1.5rem;
+		}
+		to {
+			--chips-fade: 0px;
+		}
+	}
+</style>

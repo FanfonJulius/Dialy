@@ -13,6 +13,7 @@
 	import { geolocation } from '#lib/location/geolocation.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { history } from '#lib/stores/history.svelte.js';
 	import { outbox } from '#lib/stores/outbox.svelte.js';
 	import AmountField from '#lib/ui/AmountField.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -78,6 +79,16 @@
 	function record(): void {
 		if (!clientUuid || amount === null) return;
 		const now = Date.now();
+		const capturedAt = new Date(now).toISOString();
+		void history.record({
+			id: clientUuid,
+			kind: 'withdrawal',
+			network: network.id,
+			code,
+			amount,
+			dialedAt: capturedAt,
+			pointId
+		});
 		const location = withdrawalLocation(geolocation.fix, now);
 		// Without a point or a position the server could not place the withdrawal.
 		if (!pointId && !location) return;
@@ -86,7 +97,7 @@
 			network: network.id,
 			code,
 			amount,
-			capturedAt: new Date(now).toISOString(),
+			capturedAt,
 			pointId,
 			location
 		});

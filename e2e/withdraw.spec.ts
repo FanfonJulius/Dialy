@@ -37,7 +37,6 @@ test('tapping a nearby agent, choosing an amount and dialing records the withdra
 
 test('the amount is checked before dialing', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /Show the list/ }).click();
 	await page.getByRole('button', { name: /MTN MoMo 24680/ }).click();
 
 	await page.getByRole('button', { name: 'Dial' }).click();

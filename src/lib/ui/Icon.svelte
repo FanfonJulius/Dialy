@@ -8,10 +8,13 @@
 		| 'locate'
 		| 'close'
 		| 'chevron-up'
+		| 'chevron-left'
 		| 'copy'
 		| 'download'
 		| 'phone'
 		| 'heart'
+		| 'history'
+		| 'directions'
 		| 'eye'
 		| 'eye-off';
 </script>
@@ -51,6 +54,8 @@
 		<path d="M6 6l12 12M18 6 6 18" />
 	{:else if name === 'chevron-up'}
 		<path d="m6 15 6-6 6 6" />
+	{:else if name === 'chevron-left'}
+		<path d="m15 6-6 6 6 6" />
 	{:else if name === 'copy'}
 		<rect x="8.5" y="8.5" width="12" height="12" rx="2" />
 		<path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5" />
@@ -62,6 +67,12 @@
 		/>
 	{:else if name === 'heart'}
 		<path d="M12 19.5s-8-4.6-8-10.4A4.6 4.6 0 0 1 12 6a4.6 4.6 0 0 1 8 3.1c0 5.8-8 10.4-8 10.4z" />
+	{:else if name === 'history'}
+		<path d="M4 12a8 8 0 1 0 2.34-5.66L4 9" />
+		<path d="M4 4.5V9h4.5M12 8v4l2.5 2.5" />
+	{:else if name === 'directions'}
+		<path d="M12 2.5 21.5 12 12 21.5 2.5 12z" />
+		<path d="M9 14.5v-3a1.5 1.5 0 0 1 1.5-1.5H15m-2-2 2 2-2 2" />
 	{:else}
 		<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" />
 		<circle cx="12" cy="12" r="3" />

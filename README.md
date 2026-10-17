@@ -37,6 +37,13 @@ are columns on `networks`. Edit them in the dashboard to change behaviour withou
 
 The Donations tab's numbers and transfer codes are in `src/lib/domain/donation.ts` (changing them needs a release).
 
+The History screen (clock icon on the map) records a withdrawal or donation when the user taps Dial or Copy.
+Withdrawals also come back from the server (`my_withdrawals()`), so they follow the account to a new phone; donations
+stay on the phone.
+
+Walking directions use the public FOSSGIS OSRM server (`routing.openstreetmap.de`, foot profile, fair use; credited in
+the app). Without it, the app draws a straight line.
+
 ## Deploy (Vercel)
 
 `vercel.json` builds with `npm run build`, serves `build/`, rewrites every route to the SPA shell and sets security

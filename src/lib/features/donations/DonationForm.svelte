@@ -12,6 +12,7 @@
 	import { formatAmount, formatPhoneNumber } from '#lib/i18n/format.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { history } from '#lib/stores/history.svelte.js';
 	import AmountField from '#lib/ui/AmountField.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 
@@ -28,6 +29,8 @@
 	const amount = $derived(parseAmount(amountText));
 	const amountProblem = $derived(amountIssue(amount, DONATION_LIMITS));
 	const ussd = $derived(amount !== null && !amountProblem ? donationUssd(target, amount) : null);
+	// One history entry per USSD string: dialing the same donation twice lists it once.
+	const donationId = $derived(ussd ? crypto.randomUUID() : null);
 	// The dial line as it fills in, e.g. `*126*9*654571914*` + typed amount + `#`.
 	const previewParts = $derived(
 		ussdSegments(target.template).map((segment) => {
@@ -49,9 +52,23 @@
 		return issue === 'amount_required' ? m.withdraw_error_amount_required() : m.withdraw_error_amount_too_high();
 	}
 
+	function record(): void {
+		if (!donationId || amount === null) return;
+		void history.record({
+			id: donationId,
+			kind: 'donation',
+			network,
+			code: target.number,
+			amount,
+			dialedAt: new Date().toISOString(),
+			pointId: null
+		});
+	}
+
 	function dial(): void {
 		attempted = true;
 		if (!ussd) return;
+		record();
 		// Same click as the user's tap, so the browser lets the dialer open.
 		window.location.href = ussdTelHref(ussd);
 	}
@@ -62,6 +79,7 @@
 		try {
 			await navigator.clipboard.writeText(ussd);
 			copied = true;
+			record();
 		} catch {
 			copied = false;
 		}

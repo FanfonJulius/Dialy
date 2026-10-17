@@ -4,6 +4,7 @@ import { setSavedRemote } from '#lib/data/supabase/saved.js';
 import { recordWithdrawal } from '#lib/data/supabase/withdrawals.js';
 import type { WithdrawalRequest } from '#lib/domain/withdrawal.js';
 import { Outbox, type OutboxEvent } from '#lib/sync/outbox.js';
+import { history } from './history.svelte.js';
 import { pointsSync } from './local-data.svelte.js';
 import { session } from './session.svelte.js';
 
@@ -82,7 +83,9 @@ class OutboxStore {
 
 	#onEvent(event: OutboxEvent): void {
 		if (event.type !== 'withdrawal-recorded' || event.outcome !== 'attached') this.notice = event;
-		if (event.type === 'withdrawal-recorded') void this.#refreshPointArea(event.pointId, event.request);
+		if (event.type !== 'withdrawal-recorded') return;
+		void history.attachPoint(event.request.clientUuid, event.pointId);
+		void this.#refreshPointArea(event.pointId, event.request);
 	}
 
 	async #refreshPointArea(pointId: string, request: WithdrawalRequest): Promise<void> {
