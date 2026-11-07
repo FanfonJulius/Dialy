@@ -20,6 +20,7 @@
 	let { items, networkName, onselect }: Props = $props();
 
 	const locale = getLocale();
+	const MAX_NEARBY_DISTANCE = 100;
 </script>
 
 <section
@@ -45,7 +46,9 @@
 
 	<div id="nearby-list" class="max-h-[35dvh] min-h-0 overflow-y-auto" hidden={!open}>
 		{#if items.length === 0}
-			<p class="px-5 pb-5 text-sm text-fg-muted">{m.nearby_empty()}</p>
+			<p class="px-5 pb-5 text-sm text-fg-muted">
+				{m.nearby_empty()} ({MAX_NEARBY_DISTANCE}m radius)
+			</p>
 		{:else}
 			<ul class="px-3 pb-3">
 				{#each items as { point, distanceM } (point.id)}
@@ -57,7 +60,10 @@
 						>
 							<NetworkBadge network={point.network} name={networkName(point.network)} />
 							<span class="flex-1 font-mono text-lg font-semibold text-fg">{point.code}</span>
-							<span class="text-sm text-fg-muted">{formatDistance(distanceM, locale)}</span>
+							<span class="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-xs font-medium text-fg-muted">
+								<Icon name="location" class="size-3" />
+								{formatDistance(distanceM, locale)}
+							</span>
 						</button>
 					</li>
 				{/each}

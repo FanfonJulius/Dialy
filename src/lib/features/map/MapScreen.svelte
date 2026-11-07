@@ -21,6 +21,7 @@
 	import PointCard from './PointCard.svelte';
 
 	const NEARBY_LIMIT = 20;
+	const NEARBY_RADIUS_M = 100;
 
 	let mapView = $state<ReturnType<typeof MapView>>();
 	let filter = $state<PointFilter>({ network: 'all', code: '' });
@@ -39,7 +40,7 @@
 	const selected = $derived(localData.points.find((point) => point.id === selectedId) ?? null);
 	const selectedDistanceM = $derived(selected && geolocation.fix ? distanceMeters(geolocation.fix, selected) : null);
 	const nearby = $derived(
-		geolocation.fix ? nearestPoints(visiblePoints, geolocation.fix, NEARBY_LIMIT) : []
+		geolocation.fix ? nearestPoints(visiblePoints, geolocation.fix, NEARBY_LIMIT, NEARBY_RADIUS_M) : []
 	);
 	const routeLine = $derived(
 		directions.path ? { path: directions.path, straight: directions.status === 'straight' } : null

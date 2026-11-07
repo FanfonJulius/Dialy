@@ -9,9 +9,19 @@
 		$props();
 
 	const MAX_CODE_LENGTH = 6;
+	let draftCode = $state(filter.code);
 
 	function setCode(raw: string): void {
-		filter = { ...filter, code: raw.replace(/\D/g, '').slice(0, MAX_CODE_LENGTH) };
+		draftCode = raw.replace(/\D/g, '').slice(0, MAX_CODE_LENGTH);
+	}
+
+	function applySearch(): void {
+		filter = { ...filter, code: draftCode };
+	}
+
+	function clearSearch(): void {
+		draftCode = '';
+		filter = { ...filter, code: '' };
 	}
 
 	const chips = $derived([
@@ -21,7 +31,10 @@
 </script>
 
 <div class="flex flex-col gap-2">
-	<label class="flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 shadow-md">
+	<form class="flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 shadow-md" onsubmit={(e) => {
+		e.preventDefault();
+		applySearch();
+	}}>
 		<Icon name="search" class="size-5 shrink-0 text-fg-muted" />
 		<span class="sr-only">{m.map_search_label()}</span>
 		<input
@@ -31,23 +44,30 @@
 			autocomplete="off"
 			maxlength={MAX_CODE_LENGTH}
 			placeholder={m.map_search_placeholder()}
-			value={filter.code}
-			oninput={(event) => {
-				setCode(event.currentTarget.value);
-				event.currentTarget.value = filter.code;
-			}}
+			value={draftCode}
+			oninput={(event) => setCode(event.currentTarget.value)}
 		/>
-		{#if filter.code}
+		{#if draftCode}
 			<button
 				type="button"
-				class="-m-1 rounded-full p-1 text-fg-muted"
+				class="-m-1 rounded-full p-1 text-fg-muted hover:text-fg transition-colors"
 				aria-label={m.map_search_clear()}
-				onclick={() => setCode('')}
+				onclick={(e) => {
+					e.preventDefault();
+					clearSearch();
+				}}
 			>
 				<Icon name="close" class="size-5" />
 			</button>
 		{/if}
-	</label>
+		<button
+			type="submit"
+			class="rounded-full bg-primary px-3 py-1 text-sm font-medium text-on-primary hover:opacity-90 transition-opacity"
+			aria-label={m.map_search_submit()}
+		>
+			{m.map_search_submit()}
+		</button>
+	</form>
 
 	<div class="flex items-center gap-2">
 		<!-- On narrow phones the chips scroll sideways instead of breaking onto two lines. -->

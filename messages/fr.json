@@ -74,6 +74,7 @@
 	"map_search_label": "Rechercher par code agent",
 	"map_search_placeholder": "Code agent",
 	"map_search_clear": "Effacer la recherche",
+	"map_search_submit": "Rechercher",
 	"map_filter_label": "Réseau",
 	"map_filter_all": "Tous",
 	"map_recenter": "Afficher ma position",

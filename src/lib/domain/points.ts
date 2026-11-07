@@ -104,9 +104,23 @@ export function matchesFilter(point: CashPoint, filter: PointFilter): boolean {
 
 export type NearbyPoint = { point: CashPoint; distanceM: number };
 
-export function nearestPoints(points: readonly CashPoint[], origin: LatLng, limit: number): NearbyPoint[] {
+/**
+ * Finds the nearest points within an optional radius limit.
+ * @param points - Array of points to search
+ * @param origin - Reference location
+ * @param limit - Maximum number of points to return
+ * @param radiusM - Optional maximum distance in meters (default: unlimited)
+ * @returns Sorted array of nearby points within radius (if specified), up to limit
+ */
+export function nearestPoints(
+	points: readonly CashPoint[],
+	origin: LatLng,
+	limit: number,
+	radiusM?: number
+): NearbyPoint[] {
 	return points
 		.map((point) => ({ point, distanceM: distanceMeters(origin, point) }))
+		.filter((item) => radiusM === undefined || item.distanceM <= radiusM)
 		.sort((a, b) => a.distanceM - b.distanceM)
 		.slice(0, limit);
 }
