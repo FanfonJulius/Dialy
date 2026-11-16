@@ -54,3 +54,18 @@ test('an online map that could not load is tried again without reopening Daily',
 
 	await expect.poll(() => showsOnlineMap(page, 'light'), { timeout: 20_000 }).toBe(true);
 });
+
+test('without the online map (offline), the map still turns dark with the phone', async ({ page }) => {
+	api.onlineMapFailures = Number.POSITIVE_INFINITY;
+	const brightness = async () => {
+		const [red, green, blue] = (await pixelAt(page, 40, 300)) as [number, number, number];
+		return (red + green + blue) / 3;
+	};
+	await page.goto('/');
+	await expect(page.getByRole('region', { name: 'Map of cash points' })).toBeVisible();
+	await expect.poll(brightness).toBeGreaterThan(150);
+
+	await page.emulateMedia({ colorScheme: 'dark' });
+
+	await expect.poll(brightness).toBeLessThan(100);
+});

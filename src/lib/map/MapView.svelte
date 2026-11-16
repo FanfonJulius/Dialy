@@ -327,13 +327,15 @@
 		};
 	});
 
-	// Theme changes restyle the map in place (locale changes reload the page).
+	// Theme changes restyle the map in place (locale changes reload the page). Daily's own map and the plain
+	// background follow at once; an online map stays until its other style arrives, as its streets matter
+	// more than its colours (e.g. offline).
 	$effect(() => {
 		const current = theme.resolved;
 		if (!map || current === styledTheme) return;
 		styledTheme = current;
-		if (tiles) restyle();
-		else void useFallback(current);
+		if (tiles || !fallback) restyle();
+		if (!tiles) void useFallback(current);
 	});
 
 	// Points arrive in bursts (area downloads, sync pages): re-cluster once they settle.
