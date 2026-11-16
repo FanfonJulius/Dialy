@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { FakeSupabase } from './fake-supabase';
+import { openNearby } from './nearby';
 
 let api: FakeSupabase;
 
@@ -27,6 +28,7 @@ test.afterEach(() => {
 
 test('withdrawals and donations are added to the history when dialed, not before', async ({ page }) => {
 	await page.goto('/');
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await page.getByRole('button', { name: 'FCFA 5,000' }).click();
 
@@ -36,6 +38,7 @@ test('withdrawals and donations are added to the history when dialed, not before
 	await expect(page.getByText('Nothing here yet')).toBeVisible();
 
 	await page.getByRole('link', { name: 'Back to the map' }).click();
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await page.getByRole('button', { name: 'FCFA 5,000' }).click();
 	await page.getByRole('button', { name: 'Dial' }).click();

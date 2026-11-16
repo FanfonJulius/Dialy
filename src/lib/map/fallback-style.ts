@@ -7,7 +7,9 @@ import type { ResolvedTheme } from '#lib/domain/theme.js';
  */
 export const OPENFREEMAP_ORIGIN = 'https://tiles.openfreemap.org';
 const STYLE_NAMES: Record<ResolvedTheme, string> = { light: 'liberty', dark: 'dark' };
-const TIMEOUT_MS = 8000;
+// Generous: OpenFreeMap sometimes takes 20 s to answer from Cameroon, and a retry would start over.
+// The points already show on a plain map meanwhile.
+const TIMEOUT_MS = 30_000;
 
 const loaded = new Map<ResolvedTheme, Promise<StyleSpecification | null>>();
 
@@ -34,7 +36,7 @@ export function loadFallbackStyle(theme: ResolvedTheme): Promise<StyleSpecificat
 	if (!style) {
 		style = fetchStyle(theme);
 		loaded.set(theme, style);
-		// A failure is not remembered, so the next opening tries again.
+		// A failure is not remembered, so the next try fetches again.
 		void style.then((result) => result ?? loaded.delete(theme));
 	}
 	return style;

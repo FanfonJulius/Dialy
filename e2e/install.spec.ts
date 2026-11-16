@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FakeSupabase } from './fake-supabase';
+import { openNearby } from './nearby';
 
 const IPHONE =
 	'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
@@ -22,6 +23,7 @@ test.afterEach(() => {
  * comes back to Daily as from the phone's dialer.
  */
 async function withdrawAndComeBack(page: Page): Promise<void> {
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await page.getByRole('button', { name: 'FCFA 5,000' }).click();
 	await page.getByRole('button', { name: 'Copy code' }).click();

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FakeSupabase, HERE } from './fake-supabase';
+import { openNearby } from './nearby';
 
 let api: FakeSupabase;
 
@@ -24,6 +25,7 @@ test('tapping a nearby agent, choosing an amount and dialing records the withdra
 	const [point] = api.points;
 	await page.goto('/');
 
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await expect(page.locator('#point-code')).toHaveText('13579');
 	await page.getByRole('button', { name: 'FCFA 5,000' }).click();
@@ -55,6 +57,7 @@ test('the amount is checked before dialing', async ({ page }) => {
 
 test('a withdrawal dialed offline is kept and sent once back online', async ({ page, context }) => {
 	await page.goto('/');
+	await openNearby(page);
 	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
 
 	api.unreachable = true;
@@ -87,6 +90,7 @@ test('a new agent dialed before the phone has a precise position is added as soo
 	context
 }) => {
 	await page.goto('/');
+	await openNearby(page);
 	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
 	// Indoors, right after opening the app: only a rough, network-based position.
 	await context.setGeolocation({ ...HERE, accuracy: 600 });
@@ -115,6 +119,7 @@ test('a new agent dialed before the phone has a precise position is added as soo
 	const later = await page.context().newPage();
 	await api.signInBeforeLoad(later);
 	await later.goto('/');
+	await openNearby(later);
 	await expect(later.getByRole('region', { name: 'Nearby' }).getByRole('button', { name: /86420/ })).toBeVisible();
 });
 
@@ -122,6 +127,7 @@ test('leaving Daily (e.g. for the dialer) lets go of the field typed in, so it r
 	page
 }) => {
 	await page.goto('/');
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	const amount = page.getByLabel('Amount (FCFA)');
 	await amount.fill('5000');

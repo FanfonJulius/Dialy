@@ -71,7 +71,19 @@ Apply new migrations (`npm run db:push`) before or together with the app release
 - `src/app.html` draws the launch screen (logo and name, light or dark) in plain HTML and CSS, so it is on screen from
   the first frame, before any script runs; `hideLaunchScreen()` removes it once the first screen has rendered. Its
   background matches the manifest's `background_color`, which Android uses for its own splash screen.
+- Daily opens on the map: the Nearby list is folded to its title and the number of agents within 100 m, and no field
+  is focused, so no keyboard comes up, also when coming back from the dialer (`openWithoutKeyboard()`).
 - Right after a withdrawal is dialed (when the user comes back from the phone's dialer), Daily offers to add itself
   to the Home screen: the browser's install prompt where there is one (Android), otherwise the steps for Safari
   (iPhone, iPad), the browser menu (Android) or "open in your browser" (Facebook, Instagram… in-app browsers). After
   "Not now" it comes back after 3 days, and never after being turned down 3 times or once installed.
+
+## Map
+
+- Daily's own map (Protomaps, light and dark, usable offline) is built and uploaded to the public `tiles` bucket by the
+  "Map tiles" GitHub workflow (monthly, or by hand from the Actions tab). It needs the repository variable
+  `SUPABASE_URL` and the secret `SUPABASE_SECRET_KEY`. Once `manifest.json` is published, the app switches to it.
+- Until then, Daily shows OpenFreeMap's online map (`liberty` in light mode, `dark` in dark mode). It is fetched
+  while MapLibre loads, without waiting to hear whether Daily's own map exists, and a failed load is tried again
+  (after 2, 5, 10, then every 30 seconds, and at once when the phone is back online or Daily comes back on screen).
+- The cash points are drawn straight away on a plain background, whatever the map underneath is doing.

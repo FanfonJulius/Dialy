@@ -1,6 +1,6 @@
 <script lang="ts" module>
-	// Stays as the user left it while Daily is open, also when coming back from another tab.
-	let open = $state(true);
+	// Closed when Daily opens, so the map and its points come first; then it stays as the user leaves it.
+	let open = $state(false);
 </script>
 
 <script lang="ts">
@@ -13,13 +13,15 @@
 
 	type Props = {
 		items: readonly NearbyPoint[];
+		/** More agents are within reach than are listed. */
+		more?: boolean;
 		/** Points farther than this are not listed at all. */
 		radiusM: number;
 		networkName: (id: string) => string;
 		onselect: (point: CashPoint) => void;
 	};
 
-	let { items, radiusM, networkName, onselect }: Props = $props();
+	let { items, more = false, radiusM, networkName, onselect }: Props = $props();
 
 	const locale = getLocale();
 </script>
@@ -37,7 +39,15 @@
 	>
 		<span class="flex flex-col items-start">
 			<span class="mx-auto mb-2 h-1 w-10 self-center rounded-full bg-border" aria-hidden="true"></span>
-			<span id="nearby-title" class="text-base font-semibold text-fg">{m.nearby_title()}</span>
+			<span class="flex items-center gap-2">
+				<span id="nearby-title" class="text-base font-semibold text-fg">{m.nearby_title()}</span>
+				{#if items.length > 0}
+					<!-- How many agents are within reach, also while the list is closed. -->
+					<span class="min-w-6 rounded-full bg-primary px-1.5 py-0.5 text-center text-xs font-bold text-on-primary"
+						>{items.length}{more ? '+' : ''}</span
+					>
+				{/if}
+			</span>
 		</span>
 		<span class="flex items-center gap-1 text-sm text-fg-muted">
 			<span class="sr-only">{open ? m.nearby_collapse() : m.nearby_expand()}</span>

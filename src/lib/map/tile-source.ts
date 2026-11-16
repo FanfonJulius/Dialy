@@ -7,7 +7,8 @@ const TILES_BASE_URL = PUBLIC_TILES_BASE_URL || `${PUBLIC_SUPABASE_URL}/storage/
 const MANIFEST_STORAGE_KEY = 'daily.tiles.manifest';
 const MANIFEST_TIMEOUT_MS = 8000;
 
-function readCachedManifest(): TileManifest | null {
+/** The manifest from the last time the server had one, read without the network. */
+export function cachedTileManifest(): TileManifest | null {
 	try {
 		const cached: unknown = JSON.parse(localStorage.getItem(MANIFEST_STORAGE_KEY) ?? 'null');
 		return isTileManifest(cached) ? cached : null;
@@ -37,7 +38,7 @@ async function fetchManifest(): Promise<TileManifest | null> {
  * the map opens at once from the cached copy and the next opening uses any newer build.
  */
 export async function loadTileManifest(): Promise<TileManifest | null> {
-	const cached = readCachedManifest();
+	const cached = cachedTileManifest();
 	if (cached) {
 		void fetchManifest();
 		return cached;
@@ -47,7 +48,7 @@ export async function loadTileManifest(): Promise<TileManifest | null> {
 
 /** The newest manifest, for downloads that should use the current build. */
 export async function freshTileManifest(): Promise<TileManifest | null> {
-	return (await fetchManifest()) ?? readCachedManifest();
+	return (await fetchManifest()) ?? cachedTileManifest();
 }
 
 /** Reads single tiles from the build's archives with HTTP range requests. */

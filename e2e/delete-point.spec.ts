@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { FakeSupabase } from './fake-supabase';
+import { openNearby } from './nearby';
 
 let api: FakeSupabase;
 
@@ -30,6 +31,7 @@ test('whoever added a point can take it off the map for everyone', async ({ page
 	const [point] = api.points;
 	await page.goto('/');
 
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await expect(page.getByText('You added this point.')).toBeVisible();
 	await page.getByRole('button', { name: 'Delete point' }).click();
@@ -38,6 +40,7 @@ test('whoever added a point can take it off the map for everyone', async ({ page
 	await confirm.getByRole('button', { name: 'Delete for everyone' }).click();
 
 	await expect(page.getByText('Point deleted. Nobody will see it on the map anymore.')).toBeVisible();
+	await openNearby(page);
 	await expect(page.getByRole('region', { name: 'Nearby' }).getByRole('button', { name: /13579/ })).toHaveCount(0);
 	await expect.poll(() => point.status).toBe('hidden');
 });
@@ -49,6 +52,7 @@ test('nobody else can delete a point, not even people who withdrew there', async
 	await expect(page.getByText('13579')).toBeVisible();
 
 	await page.getByRole('link', { name: 'Back to the map' }).click();
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 
 	await expect(page.locator('#point-code')).toHaveText('13579');

@@ -5,6 +5,8 @@ import type { Page, Route } from '@playwright/test';
 // Must match .env.e2e: the e2e build sends every API call here, and the tests answer them.
 export const API_ORIGIN = 'https://e2e-test.supabase.co';
 export const HERE = { latitude: 3.8667, longitude: 11.5167 };
+/** Ground colour of the stand-ins for OpenFreeMap's light ("liberty") and dark styles. */
+export const ONLINE_MAP_COLORS = { light: '#e8e4da', dark: '#20242c' } as const;
 
 // Real Protomaps tiles of central Yaoundé (zooms 11-14), so the offline map code runs against a true archive.
 const BASEMAP = readFileSync(new URL('./fixtures/yaounde.pmtiles', import.meta.url));
@@ -81,9 +83,13 @@ export class FakeSupabase {
 	unreachable = false;
 	/** When true, a basemap is published (manifest and tile archive); otherwise the map has no tiles. */
 	basemap = false;
+	/** When true, the question whether a basemap is published is never answered (a server that hangs). */
+	manifestHangs = false;
 	tileRangeRequests = 0;
 	/** Requests for the online fallback map (OpenFreeMap), answered locally. */
 	fallbackStyleRequests = 0;
+	/** How many of the next requests for the online map fail, as offline or on a weak signal. */
+	onlineMapFailures = 0;
 	profile: { onboarded_at: string | null; privacy_version: number | null } = { onboarded_at: null, privacy_version: null };
 	unexpected: string[] = [];
 
@@ -104,8 +110,14 @@ export class FakeSupabase {
 		await page.context().route(`${API_ORIGIN}/**`, (route) => this.#handle(route));
 		// Stand-in for the OpenFreeMap fallback style, so the tests never depend on the internet.
 		await page.context().route('https://tiles.openfreemap.org/**', (route) => {
-			if (!new URL(route.request().url()).pathname.startsWith('/styles/')) return route.fulfill({ status: 404 });
+			const path = new URL(route.request().url()).pathname;
+			if (!path.startsWith('/styles/')) return route.fulfill({ status: 404 });
 			this.fallbackStyleRequests++;
+			if (this.onlineMapFailures > 0) {
+				this.onlineMapFailures--;
+				return route.abort('internetdisconnected');
+			}
+			const ground = path === '/styles/dark' ? ONLINE_MAP_COLORS.dark : ONLINE_MAP_COLORS.light;
 			return route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -113,7 +125,7 @@ export class FakeSupabase {
 					version: 8,
 					glyphs: 'http://localhost:4173/map/fonts/{fontstack}/{range}.pbf',
 					sources: {},
-					layers: [{ id: 'fallback-background', type: 'background', paint: { 'background-color': '#e8e4da' } }]
+					layers: [{ id: 'fallback-background', type: 'background', paint: { 'background-color': ground } }]
 				})
 			});
 		});
@@ -220,6 +232,7 @@ export class FakeSupabase {
 		}
 		if (path.startsWith('/storage/v1/object/public/tiles/')) {
 			const object = path.slice('/storage/v1/object/public/tiles/'.length);
+			if (this.manifestHangs && object === 'manifest.json') return; // left unanswered
 			if (this.basemap && object === 'manifest.json') return json(200, MANIFEST);
 			if (this.basemap && object === `${MANIFEST.build}/${BASEMAP_FILE}`) return this.#serveRange(route);
 			return json(404, { statusCode: '404', error: 'not_found', message: 'Object not found' });

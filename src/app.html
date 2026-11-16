@@ -14,6 +14,8 @@
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
 		<!-- The first API call (session, points) skips DNS + TLS setup: seconds on a weak 3G connection. -->
 		<link rel="preconnect" href="%sveltekit.env.PUBLIC_SUPABASE_URL%" crossorigin />
+		<!-- Same for the online map (OpenFreeMap), shown until Daily publishes its own map tiles. -->
+		<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
 		<script src="%sveltekit.assets%/theme-init.js"></script>
 		<!--
 			Launch screen: painted on the first frame from this file alone (served by the service worker,

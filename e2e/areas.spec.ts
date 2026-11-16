@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { FakeSupabase } from './fake-supabase';
+import { openNearby } from './nearby';
 
 test('the area on screen can be downloaded for offline use, listed and deleted', async ({ page }) => {
 	const api = new FakeSupabase();
@@ -7,6 +8,7 @@ test('the area on screen can be downloaded for offline use, listed and deleted',
 	await api.signInBeforeLoad(page);
 
 	await page.goto('/');
+	await openNearby(page);
 	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
 	// No tiles of Daily's own yet: the online fallback map is used instead of a blank one.
 	await expect.poll(() => api.fallbackStyleRequests).toBeGreaterThan(0);
@@ -35,7 +37,10 @@ test('an offline area stores the real map tiles of the place', async ({ page }) 
 	await api.signInBeforeLoad(page);
 
 	await page.goto('/');
+	await openNearby(page);
 	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
+	// The map is drawn from Daily's own tiles, in place of the online map, before anything is downloaded.
+	await expect.poll(() => api.tileRangeRequests).toBeGreaterThan(0);
 	await page.getByRole('button', { name: 'Download this area' }).click();
 	await expect(page.getByText(/^About \d/)).toBeVisible();
 	await page.getByRole('button', { name: 'Download', exact: true }).click();

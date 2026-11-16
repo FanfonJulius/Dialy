@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FakeSupabase, HERE } from './fake-supabase';
+import { openNearby } from './nearby';
 
 // A walk of about 234 m: north along one street, then east to the MTN agent 24680.
 const START = [HERE.longitude, HERE.latitude];
@@ -38,6 +39,7 @@ test('a far point gets a walking route that shrinks as the user walks, until arr
 	await page.goto('/');
 
 	// A point a few steps away needs no directions.
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await expect(page.locator('#point-code')).toHaveText('13579');
 	await expect(page.getByRole('button', { name: 'Directions' })).toHaveCount(0);

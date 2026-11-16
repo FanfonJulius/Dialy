@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { FakeSupabase } from './fake-supabase';
+import { openNearby } from './nearby';
 
 test('a saved point appears in Saved, opens on the map ready to dial, and can be removed', async ({ page }) => {
 	const api = new FakeSupabase();
@@ -8,6 +9,7 @@ test('a saved point appears in Saved, opens on the map ready to dial, and can be
 	const [point] = api.points;
 
 	await page.goto('/');
+	await openNearby(page);
 	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
 	await page.getByRole('button', { name: 'Save point' }).click();
 	await expect(page.getByRole('button', { name: 'Save point' })).toHaveAttribute('aria-pressed', 'true');

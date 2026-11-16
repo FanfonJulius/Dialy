@@ -40,9 +40,11 @@
 	const visiblePoints = $derived(localData.points.filter((point) => matchesFilter(point, filter)));
 	const selected = $derived(localData.points.find((point) => point.id === selectedId) ?? null);
 	const selectedDistanceM = $derived(selected && geolocation.fix ? distanceMeters(geolocation.fix, selected) : null);
-	const nearby = $derived(
-		geolocation.fix ? nearestPoints(visiblePoints, geolocation.fix, NEARBY_LIMIT, NEARBY_RADIUS_M) : []
+	// One more than is listed, to tell "20 agents near" from "more than 20".
+	const nearbyFound = $derived(
+		geolocation.fix ? nearestPoints(visiblePoints, geolocation.fix, NEARBY_LIMIT + 1, NEARBY_RADIUS_M) : []
 	);
+	const nearby = $derived(nearbyFound.slice(0, NEARBY_LIMIT));
 	const routeLine = $derived(
 		directions.path ? { path: directions.path, straight: directions.status === 'straight' } : null
 	);
@@ -289,6 +291,7 @@
 			</div>
 			<NearbySheet
 				items={nearby}
+				more={nearbyFound.length > nearby.length}
 				radiusM={NEARBY_RADIUS_M}
 				networkName={(id) => localData.networkName(id)}
 				onselect={select}

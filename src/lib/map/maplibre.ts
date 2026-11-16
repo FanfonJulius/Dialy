@@ -1,6 +1,6 @@
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
-type MapLibre = typeof import('maplibre-gl');
+export type MapLibre = typeof import('maplibre-gl');
 
 let loading: Promise<MapLibre> | null = null;
 
