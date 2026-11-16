@@ -6,10 +6,32 @@ const WATCH_OPTIONS: PositionOptions = { enableHighAccuracy: true, maximumAge: 1
 
 /** Live position, tracked only while Daily is open and visible (never in the background). */
 class GeolocationStore {
+	/** Position for rendering: only replaced when it changed enough to be worth a redraw. */
 	fix = $state.raw<Fix | null>(null);
 	status = $state<LocationStatus>('idle');
+	#latest: Fix | null = null;
+	#listeners = new Set<(fix: Fix) => void>();
 	#watchId: number | null = null;
 	#wanted = false;
+
+	/**
+	 * The newest position as reported, including ones too similar to redraw. Withdrawals use it: someone
+	 * standing in a queue at an agent never "moves", yet their position is as fresh as the last report.
+	 */
+	get latest(): Fix | null {
+		return this.#latest;
+	}
+
+	/** Whether a position can still be expected (location not refused or missing on this device). */
+	get canLocate(): boolean {
+		return this.status !== 'denied' && this.status !== 'unsupported';
+	}
+
+	/** Calls `listener` with every position reported from now on; returns the unsubscribe function. */
+	onFix(listener: (fix: Fix) => void): () => void {
+		this.#listeners.add(listener);
+		return () => this.#listeners.delete(listener);
+	}
 
 	start(): void {
 		if (!('geolocation' in navigator)) {
@@ -55,6 +77,18 @@ class GeolocationStore {
 		else this.#clear();
 	};
 
+	/**
+	 * Asks for a new position right away (a phone standing still may not report any), e.g. when a dial
+	 * finds the last one old or vague. It reaches onFix listeners like any other.
+	 */
+	refresh(): void {
+		if (!('geolocation' in navigator) || !this.canLocate) return;
+		navigator.geolocation.getCurrentPosition(this.#onPosition, this.#onError, {
+			...WATCH_OPTIONS,
+			maximumAge: 0
+		});
+	}
+
 	#watch(): void {
 		if (this.#watchId !== null) return;
 		if (this.status !== 'active') this.status = 'locating';
@@ -73,8 +107,10 @@ class GeolocationStore {
 			accuracy: position.coords.accuracy,
 			timestamp: position.timestamp
 		};
+		this.#latest = next;
 		this.status = 'active';
 		if (isSignificantFix(this.fix, next)) this.fix = next;
+		for (const listener of this.#listeners) listener(next);
 	};
 
 	#onError = (error: GeolocationPositionError): void => {

@@ -17,7 +17,8 @@ export async function pullHistory(
 		code: withdrawal.point.code,
 		amount: withdrawal.amount,
 		dialedAt: withdrawal.dialedAt,
-		pointId: withdrawal.point.id
+		pointId: withdrawal.point.id,
+		createdPoint: withdrawal.createdPoint
 	}));
 	await db.transaction('rw', db.history, db.points, async () => {
 		// The points may lie outside the synced areas: keep them so a history entry opens on the map offline.

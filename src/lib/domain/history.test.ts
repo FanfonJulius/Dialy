@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyPoints, parseWithdrawalHistory, type HistoryEntry } from './history.ts';
+import { createdPointIds, historyPoints, parseWithdrawalHistory, redial, type HistoryEntry } from './history.ts';
 
 function entry(overrides: Partial<HistoryEntry>): HistoryEntry {
 	return {
@@ -60,12 +60,13 @@ describe('parseWithdrawalHistory', () => {
 	};
 
 	it('reads my_withdrawals rows with their points, in one time format', () => {
-		expect(parseWithdrawalHistory([row])).toEqual([
+		expect(parseWithdrawalHistory([{ ...row, created_point: true }])).toEqual([
 			{
 				clientUuid: row.client_uuid,
 				amount: 20000,
 				dialedAt: '2026-10-16T14:30:00.000Z',
 				active: true,
+				createdPoint: true,
 				point: {
 					id: row.point_id,
 					network: 'mtn',
@@ -81,8 +82,40 @@ describe('parseWithdrawalHistory', () => {
 		]);
 	});
 
+	it('treats rows from a server that does not say who created the point as not created by the user', () => {
+		expect(parseWithdrawalHistory([row])[0].createdPoint).toBe(false);
+	});
+
 	it('drops malformed rows', () => {
 		expect(parseWithdrawalHistory([{ ...row, amount: -5 }, { ...row, client_uuid: 'nope' }, null])).toEqual([]);
 		expect(parseWithdrawalHistory('error')).toEqual([]);
+	});
+});
+
+describe('createdPointIds', () => {
+	it('lists only the points the user put on the map', () => {
+		const ids = createdPointIds([
+			entry({ id: '1', pointId: 'mine', createdPoint: true }),
+			entry({ id: '2', pointId: 'someone-elses', createdPoint: false }),
+			entry({ id: '3', pointId: 'used-before-it-was-known' }),
+			entry({ id: '4', pointId: null, createdPoint: true })
+		]);
+
+		expect([...ids]).toEqual(['mine']);
+	});
+});
+
+describe('redial', () => {
+	it('keeps the point a dial added when the same withdrawal is dialed again (e.g. after a USSD error)', () => {
+		const first = entry({ id: 'w1', pointId: 'p1', createdPoint: true, dialedAt: '2026-11-16T09:00:00.000Z' });
+		const again = entry({ id: 'w1', pointId: null, dialedAt: '2026-11-16T09:01:00.000Z' });
+
+		expect(redial(again, first)).toEqual({ ...again, pointId: 'p1', createdPoint: true });
+	});
+
+	it('records a first dial as it is', () => {
+		const dial = entry({ id: 'w1', pointId: null });
+
+		expect(redial(dial, undefined)).toBe(dial);
 	});
 });

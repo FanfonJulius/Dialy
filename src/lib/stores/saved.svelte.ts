@@ -1,6 +1,7 @@
 import { liveQuery } from 'dexie';
 import { db, type SavedPoint } from '#lib/data/local/db.js';
 import { fetchSavedPoints } from '#lib/data/supabase/saved.js';
+import { whenIdle } from '#lib/pwa/launch.js';
 import { pullSaved } from '#lib/sync/saved-sync.js';
 import { outbox } from './outbox.svelte.js';
 
@@ -18,7 +19,8 @@ class SavedStore {
 			error: (error) => console.error('Reading saved points failed', error)
 		});
 		window.addEventListener('online', () => void this.pull());
-		void this.pull();
+		// Not needed for the first screen: wait until the map's own requests are under way.
+		whenIdle(() => void this.pull());
 	}
 
 	async set(pointId: string, saved: boolean): Promise<void> {

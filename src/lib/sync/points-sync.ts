@@ -1,5 +1,6 @@
 import { latToTileY, lngToTileX, tileBounds, tilesInBounds, type Bounds } from '#lib/domain/tiles.js';
 import { parsePointsPage } from '#lib/domain/points.js';
+import type { WithdrawalRequest } from '#lib/domain/withdrawal.js';
 import type { DailyDatabase } from '#lib/data/local/db.js';
 
 export const SYNC_CELL_ZOOM = 12;
@@ -11,7 +12,14 @@ export const PAGE_SIZE = 500;
 const MAX_PAGES_PER_CELL = 20;
 const PARALLEL_CELLS = 3;
 
-export type PointsPageRequest = { bounds: Bounds; since: string | null; sinceId: string | null; limit: number };
+export type PointsPageRequest = {
+	/** Sync cell key (`x/y` of the z12 tile); `bounds` are its edges. */
+	cell: string;
+	bounds: Bounds;
+	since: string | null;
+	sinceId: string | null;
+	limit: number;
+};
 export type FetchPointsPage = (request: PointsPageRequest) => Promise<unknown>;
 
 export type SyncResult = { status: 'synced'; cells: number; failed: number } | { status: 'area-too-large' };
@@ -42,7 +50,7 @@ export async function syncCell(db: DailyDatabase, key: string, fetchPage: FetchP
 	let sinceId: string | null = null;
 
 	for (let pageIndex = 0; pageIndex < MAX_PAGES_PER_CELL; pageIndex++) {
-		const page = parsePointsPage(await fetchPage({ bounds, since, sinceId, limit: PAGE_SIZE }));
+		const page = parsePointsPage(await fetchPage({ cell: key, bounds, since, sinceId, limit: PAGE_SIZE }));
 		await db.transaction('rw', db.points, async () => {
 			await db.points.bulkPut(page.active.map((point) => ({ ...point, cell: cellOf(point.lat, point.lng) })));
 			await db.points.bulkDelete(page.hiddenIds);
@@ -59,7 +67,7 @@ export async function syncCell(db: DailyDatabase, key: string, fetchPage: FetchP
 }
 
 export class PointsSync {
-	#inFlight = new Set<string>();
+	#inFlight = new Map<string, Promise<void>>();
 	#db: DailyDatabase;
 	#fetchPage: FetchPointsPage;
 
@@ -89,16 +97,47 @@ export class PointsSync {
 
 	/** Fetches the latest changes of the cell holding `at` now, e.g. right after a withdrawal there. */
 	async refreshAt(at: { lat: number; lng: number }, now = Date.now()): Promise<void> {
-		const key = cellOf(at.lat, at.lng);
-		if (!this.#inFlight.has(key)) await this.#syncOne(key, now);
+		await this.refreshCell(cellOf(at.lat, at.lng), now);
+	}
+
+	/** Fetches the latest changes of one cell now, waiting for a sync of it that is already running. */
+	async refreshCell(key: string, now = Date.now()): Promise<void> {
+		// A sync of this cell already running may have read it before the change: let it finish, then read again.
+		await this.#inFlight.get(key)?.catch(() => {});
+		await this.#syncOne(key, now);
 	}
 
 	async #syncOne(key: string, now: number): Promise<void> {
-		this.#inFlight.add(key);
+		const run = syncCell(this.#db, key, this.#fetchPage, now);
+		this.#inFlight.set(key, run);
 		try {
-			await syncCell(this.#db, key, this.#fetchPage, now);
+			await run;
 		} finally {
-			this.#inFlight.delete(key);
+			if (this.#inFlight.get(key) === run) this.#inFlight.delete(key);
 		}
 	}
+}
+
+/**
+ * Shows a point the server has just created for one of the user's withdrawals right away, before the
+ * next sync brings the server's copy (which is never overwritten).
+ */
+export async function placeCreatedPoint(db: DailyDatabase, pointId: string, request: WithdrawalRequest): Promise<void> {
+	const { location } = request;
+	if (!location) return;
+	await db.transaction('rw', db.points, async () => {
+		if (await db.points.get(pointId)) return;
+		await db.points.add({
+			id: pointId,
+			network: request.network,
+			code: request.code,
+			lat: location.lat,
+			lng: location.lng,
+			accuracyM: location.accuracyM,
+			withdrawalCount: 1,
+			lastWithdrawalAt: request.capturedAt,
+			updatedAt: request.capturedAt,
+			cell: cellOf(location.lat, location.lng)
+		});
+	});
 }

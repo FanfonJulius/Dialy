@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { FakeSupabase, HERE } from './fake-supabase';
 
 // A walk of about 234 m: north along one street, then east to the MTN agent 24680.
@@ -11,6 +11,13 @@ const ROUTE = {
 };
 
 let api: FakeSupabase;
+
+/** Agents beyond the Nearby radius (100 m) are reached by searching their code. */
+async function searchAgent(page: Page, code: string): Promise<void> {
+	await page.getByRole('textbox', { name: 'Search by agent code' }).fill(code);
+	await page.getByRole('button', { name: 'Search', exact: true }).click();
+	await expect(page.locator('#point-code')).toHaveText(code);
+}
 
 test.beforeEach(async ({ page }) => {
 	api = new FakeSupabase();
@@ -36,7 +43,7 @@ test('a far point gets a walking route that shrinks as the user walks, until arr
 	await expect(page.getByRole('button', { name: 'Directions' })).toHaveCount(0);
 
 	await page.getByRole('button', { name: 'Close' }).click();
-	await page.getByRole('button', { name: /MTN MoMo 24680/ }).click();
+	await searchAgent(page, '24680');
 	await page.getByRole('button', { name: 'Directions' }).click();
 
 	await expect(page.getByText(/^230 m · 3 mins? on foot$/)).toBeVisible();
@@ -65,7 +72,7 @@ test('without a connection the way is shown as a straight line', async ({ page, 
 	await context.route('https://routing.openstreetmap.de/**', (route) => route.abort('internetdisconnected'));
 	await page.goto('/');
 
-	await page.getByRole('button', { name: /MTN MoMo 24680/ }).click();
+	await searchAgent(page, '24680');
 	await page.getByRole('button', { name: 'Directions' }).click();
 
 	await expect(page.getByText(/^No walking route right now\. Straight line: 1\d0 m$/)).toBeVisible();

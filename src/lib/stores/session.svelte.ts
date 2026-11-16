@@ -35,6 +35,15 @@ class SessionStore {
 			if (session) this.user = toUser(session);
 			else if (event === 'SIGNED_OUT') this.#signedOut();
 		});
+		// Signed in on this phone before: open the app at once. Checking the session may need the network
+		// (to refresh an expired token), which takes seconds on a weak connection; supabase-js does it in
+		// the background, API calls wait for it, and an invalid session signs out through SIGNED_OUT.
+		const stored = storedSessionUser();
+		if (stored) {
+			this.user = stored;
+			void this.#confirm();
+			return;
+		}
 		// An expired token is refreshed over the network; on a weak connection the app must not wait for it.
 		const timedOut = Symbol('timed out');
 		const result = await Promise.race([
@@ -51,6 +60,16 @@ class SessionStore {
 		} else if (error && isAuthRetryableFetchError(error)) {
 			// Offline with an expired access token: supabase-js keeps the refresh token and retries later.
 			this.user = storedSessionUser();
+		}
+	}
+
+	/** Brings the stored user up to date once supabase-js has checked (or refreshed) the session. */
+	async #confirm(): Promise<void> {
+		try {
+			const { data } = await supabase.auth.getSession();
+			if (data.session) this.user = toUser(data.session);
+		} catch (error) {
+			console.warn('Checking the session failed; it is checked again on the next request', error);
 		}
 	}
 

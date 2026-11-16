@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { cellOf } from '../../src/lib/sync/points-sync.js';
 import {
 	DOUALA,
 	YAOUNDE,
@@ -220,6 +221,17 @@ describe('record_withdrawal: dedupe', () => {
 		await expectRejected(bob, { code: '54321', pointId: first.point_id }, 'point_not_found');
 		await expectRejected(bob, { code: '54321', pointId: randomUUID() }, 'point_not_found');
 	});
+
+	it('puts a fresh point on the map when a deleted point\u2019s code is dialed there again', async () => {
+		const wrong = await withdrawOk(alice, { code: '54321' });
+		await actAs(db, alice);
+		await db.query('select public.delete_my_point($1)', [wrong.point_id]);
+
+		const again = await withdrawOk(bob, { code: '54321' });
+
+		expect(again.outcome).toBe('created');
+		expect(again.point_id).not.toBe(wrong.point_id);
+	});
 });
 
 describe('record_withdrawal: offline retries', () => {
@@ -293,21 +305,22 @@ describe('record_withdrawal: abuse protection', () => {
 		await expectRejected(alice, { at: { lat: 6.5244, lng: 3.3792 } }, 'outside_service_area');
 	});
 
-	it('limits each user to 5 new points per day', async () => {
-		for (let i = 0; i < 5; i++) {
-			await withdrawOk(alice, { code: `100${i}`, at: offsetMeters(DOUALA, i * 40), minutesAgo: 10 - i });
+	it('limits each user to 10 new points per day', async () => {
+		for (let i = 0; i < 10; i++) {
+			await withdrawOk(alice, { code: `100${i}`, at: offsetMeters(DOUALA, i * 40), minutesAgo: 20 - i });
 		}
 
-		await expectRejected(alice, { code: '1009', at: offsetMeters(DOUALA, 400) }, 'daily_point_limit');
-		expect((await withdrawOk(bob, { code: '1009', at: offsetMeters(DOUALA, 400) })).outcome).toBe('created');
+		await expectRejected(alice, { code: '1019', at: offsetMeters(DOUALA, 800) }, 'daily_point_limit');
+		expect((await withdrawOk(bob, { code: '1019', at: offsetMeters(DOUALA, 800) })).outcome).toBe('created');
 	});
 
-	it('rejects a second new point of the same network right next to the user’s last one', async () => {
-		await withdrawOk(alice, { code: '1111', minutesAgo: 2 });
+	it('adds a user\u2019s second agent right next to their last one (agents side by side, a corrected typo)', async () => {
+		const first = await withdrawOk(alice, { code: '1111', minutesAgo: 2 });
 
-		await expectRejected(alice, { code: '2222', at: offsetMeters(DOUALA, 10) }, 'too_close');
-		expect((await withdrawOk(alice, { network: 'orange', code: '2222' })).outcome).toBe('created');
-		expect((await withdrawOk(bob, { code: '2222', at: offsetMeters(DOUALA, 10) })).outcome).toBe('created');
+		const nextDoor = await withdrawOk(alice, { code: '2222', at: offsetMeters(DOUALA, 10) });
+
+		expect(nextDoor.outcome).toBe('created');
+		expect(nextDoor.point_id).not.toBe(first.point_id);
 	});
 
 	it('rejects impossible location jumps', async () => {
@@ -411,5 +424,97 @@ describe('points_in_bbox and nearby_points', () => {
 		expect(rows.map((row) => row.id)).toEqual([near.point_id, far.point_id]);
 		expect(rows[0].distance_m).toBeGreaterThan(90);
 		expect(rows[0].distance_m).toBeLessThan(110);
+	});
+});
+
+describe('points_in_cell', () => {
+	async function pointsInCell(at: LatLng, since: Date | null = null, sinceId: string | null = null) {
+		const [x, y] = cellOf(at.lat, at.lng).split('/').map(Number);
+		await actAs(db, bob);
+		const { rows } = await db.query<Record<string, unknown>>('select * from public.points_in_cell($1, $2, $3, $4)', [
+			x,
+			y,
+			since,
+			sinceId
+		]);
+		return rows;
+	}
+
+	it('puts every point in the same cell as the app does', async () => {
+		// Cameroon from south to north and west to east, plus points a few metres from cell edges.
+		const places = [DOUALA, YAOUNDE, { lat: 2.35, lng: 9.95 }, { lat: 10.59, lng: 14.32 }, { lat: 12.6, lng: 14.9 }];
+		const [x, y] = cellOf(DOUALA.lat, DOUALA.lng).split('/').map(Number);
+		const westEdge = (x / 4096) * 360 - 180;
+		const northEdge = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 4096))) * 180) / Math.PI;
+		places.push({ lat: DOUALA.lat, lng: westEdge + 1e-5 }, { lat: DOUALA.lat, lng: westEdge - 1e-5 });
+		places.push({ lat: northEdge - 1e-5, lng: DOUALA.lng }, { lat: northEdge + 1e-5, lng: DOUALA.lng });
+
+		await actAsAdmin(db);
+		for (const place of places) {
+			const { rows } = await db.query<{ cell: number }>(
+				`select private.sync_cell(extensions.st_setsrid(extensions.st_makepoint($1, $2), 4326)::extensions.geography) as cell`,
+				[place.lng, place.lat]
+			);
+			const [cx, cy] = cellOf(place.lat, place.lng).split('/').map(Number);
+			expect(rows[0].cell, `${place.lat}, ${place.lng}`).toBe(cx * 4096 + cy);
+		}
+	});
+
+	it('returns the points of one cell with coordinates and no user data', async () => {
+		const { point_id } = await withdrawOk(alice, { code: '54321' });
+		await withdrawOk(bob, { code: '1111', at: YAOUNDE });
+
+		const rows = await pointsInCell(DOUALA);
+
+		expect(rows.map((row) => row.id)).toEqual([point_id]);
+		expect(Object.keys(rows[0]).sort()).toEqual(
+			[
+				'accuracy_m',
+				'code',
+				'id',
+				'last_withdrawal_at',
+				'lat',
+				'lng',
+				'network_id',
+				'status',
+				'updated_at',
+				'withdrawal_count'
+			].sort()
+		);
+	});
+
+	it('returns only points changed after the cursor, including hidden ones', async () => {
+		const first = await withdrawOk(alice, { code: '1111', minutesAgo: 3 });
+		const [cursor] = await pointsInCell(DOUALA);
+		const second = await withdrawOk(bob, { code: '2222', at: offsetMeters(DOUALA, 500), minutesAgo: 2 });
+		await actAs(db, alice);
+		await db.query('select public.delete_my_point($1)', [first.point_id]);
+
+		const changed = await pointsInCell(DOUALA, cursor.updated_at as Date, cursor.id as string);
+
+		expect(changed.map((row) => [row.id, row.status])).toEqual([
+			[second.point_id, 'active'],
+			[first.point_id, 'hidden']
+		]);
+	});
+
+	it('follows a point to its new cell when a more accurate fix moves it', async () => {
+		const { point_id } = await withdrawOk(alice, { code: '54321', accuracy: 90 });
+		const [x, y] = cellOf(DOUALA.lat, DOUALA.lng).split('/').map(Number);
+		const westEdge = (x / 4096) * 360 - 180;
+		const acrossTheEdge = { lat: DOUALA.lat, lng: westEdge - 0.0005 };
+		const before = { lat: DOUALA.lat, lng: westEdge + 0.0005 };
+		await actAsAdmin(db);
+		await db.query(
+			`update public.points set location = extensions.st_setsrid(extensions.st_makepoint($2, $3), 4326)::extensions.geography
+			 where id = $1`,
+			[point_id, before.lng, before.lat]
+		);
+
+		await withdrawOk(bob, { code: '54321', at: acrossTheEdge, accuracy: 10 });
+
+		expect((await pointsInCell(acrossTheEdge)).map((row) => row.id)).toEqual([point_id]);
+		expect(await pointsInCell(before)).toEqual([]);
+		expect(cellOf(acrossTheEdge.lat, acrossTheEdge.lng)).toBe(`${x - 1}/${y}`);
 	});
 });

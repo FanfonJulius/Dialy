@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
 	import { distanceMeters, type Bounds } from '#lib/domain/geo.js';
-	import { matchesFilter, nearestPoints, type CashPoint, type PointFilter } from '#lib/domain/points.js';
+	import { matchesFilter, NEARBY_RADIUS_M, nearestPoints, type CashPoint, type PointFilter } from '#lib/domain/points.js';
 	import { DIRECTIONS_MIN_DISTANCE_M } from '#lib/domain/route.js';
 	import DownloadAreaSheet from '#lib/features/areas/DownloadAreaSheet.svelte';
 	import NewWithdrawalSheet from '#lib/features/withdraw/NewWithdrawalSheet.svelte';
@@ -21,7 +21,6 @@
 	import PointCard from './PointCard.svelte';
 
 	const NEARBY_LIMIT = 20;
-	const NEARBY_RADIUS_M = 100;
 
 	let mapView = $state<ReturnType<typeof MapView>>();
 	let filter = $state<PointFilter>({ network: 'all', code: '' });
@@ -33,6 +32,8 @@
 	let lastBounds = $state.raw<Bounds | null>(null);
 	let bottomPanelHeight = $state(0);
 	let topPanelHeight = $state(0);
+	/** The code last searched without any match on the device. */
+	let searchMiss = $state<string | null>(null);
 	// Follow the first fix once, unless the user already moved the map themselves.
 	let centeredOnUser = false;
 
@@ -99,6 +100,33 @@
 	// Other screens always show their tab bar.
 	onDestroy(() => mapChrome.show());
 
+	// A "not found" message only describes the code it was shown for.
+	$effect(() => {
+		if (filter.code !== searchMiss) searchMiss = null;
+	});
+
+	// Searched before this area's points had arrived (first visit, slow network): open the agent once they do.
+	$effect(() => {
+		if (searchMiss !== null && searchMiss === filter.code && visiblePoints.length > 0) untrack(() => findAgent());
+	});
+
+	/** Opens the closest agent with the searched code (to the user, else to the map's centre). */
+	function findAgent(): void {
+		const origin =
+			geolocation.fix ??
+			(lastBounds
+				? { lat: (lastBounds.south + lastBounds.north) / 2, lng: (lastBounds.west + lastBounds.east) / 2 }
+				: null);
+		const best = origin ? nearestPoints(visiblePoints, origin, 1)[0]?.point : visiblePoints[0];
+		if (!best) {
+			searchMiss = filter.code;
+			return;
+		}
+		searchMiss = null;
+		centeredOnUser = true;
+		select(best);
+	}
+
 	function sync(bounds: Bounds): void {
 		lastBounds = bounds;
 		if (!connectivity.online) return;
@@ -158,7 +186,7 @@
 	>
 		<div class="pointer-events-auto flex items-start gap-2">
 			<div class="min-w-0 flex-1">
-				<MapSearch bind:filter networks={localData.networks} />
+				<MapSearch bind:filter networks={localData.networks} onsearch={findAgent} />
 			</div>
 			<div class="flex flex-col gap-2">
 				<button
@@ -195,6 +223,11 @@
 		{#if !connectivity.online}
 			<p class="self-center rounded-full bg-fg px-3 py-1 text-xs font-medium text-bg shadow" role="status">
 				{m.map_offline()}
+			</p>
+		{/if}
+		{#if searchMiss}
+			<p class="self-center rounded-full bg-surface px-3 py-1 text-xs font-medium text-fg shadow" role="status">
+				{m.map_search_no_results({ code: searchMiss })}
 			</p>
 		{/if}
 		{#if outbox.pending > 0}
@@ -254,7 +287,12 @@
 					{m.withdraw_start()}
 				</button>
 			</div>
-			<NearbySheet items={nearby} networkName={(id) => localData.networkName(id)} onselect={select} />
+			<NearbySheet
+				items={nearby}
+				radiusM={NEARBY_RADIUS_M}
+				networkName={(id) => localData.networkName(id)}
+				onselect={select}
+			/>
 		{/if}
 	</div>
 </div>

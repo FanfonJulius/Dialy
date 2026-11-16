@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import OutboxNotice from '#lib/features/withdraw/OutboxNotice.svelte';
+	import InstallSheet from '#lib/features/install/InstallSheet.svelte';
 	import { geolocation } from '#lib/location/geolocation.svelte.js';
 	import { areas } from '#lib/stores/areas.svelte.js';
 	import { connectivity } from '#lib/stores/connectivity.svelte.js';
@@ -38,6 +39,7 @@
 </script>
 
 <OutboxNotice />
+<InstallSheet />
 <div class="flex h-dvh flex-col">
 	<main class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 		{@render children()}

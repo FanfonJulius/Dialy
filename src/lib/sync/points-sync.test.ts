@@ -8,6 +8,7 @@ import {
 	PAGE_SIZE,
 	PointsSync,
 	cellOf,
+	placeCreatedPoint,
 	syncCell,
 	type PointsPageRequest
 } from './points-sync.js';
@@ -51,7 +52,7 @@ describe('syncCell', () => {
 
 		expect(await db.points.count()).toBe(2);
 		expect(await db.points.get(row(1).id)).toMatchObject({ code: '10001', cell: CELL });
-		expect(requests[0]).toMatchObject({ since: null, sinceId: null, limit: PAGE_SIZE });
+		expect(requests[0]).toMatchObject({ cell: CELL, since: null, sinceId: null, limit: PAGE_SIZE });
 		expect(await db.cells.get(CELL)).toMatchObject({ cursorUpdatedAt: row(2).updated_at, cursorId: row(2).id });
 	});
 
@@ -134,5 +135,67 @@ describe('PointsSync.syncArea', () => {
 			expect(result.failed).toBe(1);
 			expect(result.cells).toBeGreaterThan(1);
 		}
+	});
+});
+
+describe('PointsSync.refreshAt', () => {
+	it('fetches the cell again when a sync of it was already running (it may predate the change)', async () => {
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		let fetching!: () => void;
+		const firstFetchStarted = new Promise<void>((resolve) => (fetching = resolve));
+		let calls = 0;
+		const sync = new PointsSync(db, async () => {
+			calls++;
+			if (calls === 1) {
+				fetching();
+				await gate;
+			}
+			return calls === 1 ? [] : [row(1)];
+		});
+		const running = sync.syncArea({ west: 9.767, south: 4.05, east: 9.768, north: 4.052 });
+		await firstFetchStarted;
+
+		const refreshed = sync.refreshAt(DOUALA);
+		release();
+		await Promise.all([running, refreshed]);
+
+		expect(calls).toBe(2);
+		expect(await db.points.get(row(1).id)).toBeDefined();
+	});
+});
+
+describe('placeCreatedPoint', () => {
+	const created = {
+		clientUuid: 'c1',
+		network: 'orange',
+		code: '97531',
+		amount: 2500,
+		capturedAt: '2026-11-16T09:00:00.000Z',
+		pointId: null,
+		location: { lat: 4.0511, lng: 9.7679, accuracyM: 14 }
+	};
+
+	it('puts a point the server just created on the map at once', async () => {
+		await placeCreatedPoint(db, 'p-new', created);
+
+		expect(await db.points.get('p-new')).toMatchObject({
+			network: 'orange',
+			code: '97531',
+			lat: 4.0511,
+			lng: 9.7679,
+			accuracyM: 14,
+			withdrawalCount: 1,
+			lastWithdrawalAt: created.capturedAt,
+			cell: CELL
+		});
+	});
+
+	it('never overwrites the copy already received from the server', async () => {
+		await syncCell(db, CELL, async () => [row(1, { code: '97531' })]);
+
+		await placeCreatedPoint(db, row(1).id, created);
+
+		expect(await db.points.get(row(1).id)).toMatchObject({ network: 'mtn', accuracyM: 10 });
 	});
 });

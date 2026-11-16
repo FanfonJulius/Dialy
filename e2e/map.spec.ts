@@ -49,3 +49,43 @@ test('zooming into the map hides everything over it, zooming out brings it back'
 	await expect(tabs).toBeVisible();
 	await expect(nearby).toBeVisible();
 });
+
+test('Nearby lists only agents within 100 m; the rest are on the map and found by searching', async ({ page }) => {
+	await page.goto('/');
+	const nearby = page.getByRole('region', { name: 'Nearby' });
+	await expect(nearby.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible(); // about 30 m away
+	await expect(nearby.getByRole('button', { name: /24680/ })).toHaveCount(0); // about 170 m away
+
+	const search = page.getByRole('textbox', { name: 'Search by agent code' });
+	await search.fill('24680');
+	// Typing alone changes nothing; the Search button (or the keyboard's search key) finds the agent.
+	await expect(page.locator('#point-code')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Search', exact: true }).click();
+
+	await expect(page.locator('#point-code')).toHaveText('24680');
+	await expect(page.getByText('170 m away')).toBeVisible();
+});
+
+test('searching a code that is not on the map says so', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
+
+	await page.getByRole('textbox', { name: 'Search by agent code' }).fill('999999');
+	await page.keyboard.press('Enter');
+
+	await expect(page.getByText('No agent with code 999999 on the map here yet.')).toBeVisible();
+	await page.getByRole('button', { name: 'Clear search' }).click();
+	await expect(page.getByText('No agent with code 999999 on the map here yet.')).toBeHidden();
+});
+
+test('the launch screen shows the logo and name while Daily starts, then gets out of the way', async ({ page }) => {
+	// Part of the page itself, so it is painted before any script runs (even from the home screen).
+	const shell = await (await page.request.get('/')).text();
+	expect(shell).toContain('id="launch"');
+	expect(shell).toContain('class="launch-name" aria-hidden="true">Daily</p>');
+
+	await page.goto('/');
+
+	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
+	await expect(page.locator('#launch')).toHaveCount(0);
+});

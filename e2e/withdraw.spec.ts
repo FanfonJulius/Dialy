@@ -1,7 +1,14 @@
-import { expect, test } from '@playwright/test';
-import { FakeSupabase } from './fake-supabase';
+import { expect, test, type Page } from '@playwright/test';
+import { FakeSupabase, HERE } from './fake-supabase';
 
 let api: FakeSupabase;
+
+/** Agents beyond the Nearby radius (100 m) are reached by searching their code. */
+async function searchAgent(page: Page, code: string): Promise<void> {
+	await page.getByRole('textbox', { name: 'Search by agent code' }).fill(code);
+	await page.getByRole('button', { name: 'Search', exact: true }).click();
+	await expect(page.locator('#point-code')).toHaveText(code);
+}
 
 test.beforeEach(async ({ page }) => {
 	api = new FakeSupabase();
@@ -37,7 +44,7 @@ test('tapping a nearby agent, choosing an amount and dialing records the withdra
 
 test('the amount is checked before dialing', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('button', { name: /MTN MoMo 24680/ }).click();
+	await searchAgent(page, '24680');
 
 	await page.getByRole('button', { name: 'Dial' }).click();
 	await expect(page.getByText('Enter an amount.')).toBeVisible();
@@ -73,4 +80,40 @@ test('a withdrawal dialed offline is kept and sent once back online', async ({ p
 	expect(api.withdrawals[0]).toMatchObject({ p_code: '97531', p_amount: 2500 });
 	expect(api.withdrawals[0]).not.toHaveProperty('p_point_id');
 	await expect(page.getByText('New cash point added to the map. Thank you!')).toBeVisible();
+});
+
+test('a new agent dialed before the phone has a precise position is added as soon as it has one', async ({
+	page,
+	context
+}) => {
+	await page.goto('/');
+	await expect(page.getByRole('button', { name: /Orange Money 13579/ })).toBeVisible();
+	// Indoors, right after opening the app: only a rough, network-based position.
+	await context.setGeolocation({ ...HERE, accuracy: 600 });
+	await page.waitForTimeout(1200); // a new fix is taken into account once a second
+
+	await page.getByRole('button', { name: 'Withdraw' }).click();
+	await page.getByRole('textbox', { name: 'Agent code', exact: true }).fill('86420');
+	await page.getByLabel('Amount (FCFA)').fill('3000');
+	await page.getByRole('button', { name: 'Dial' }).click();
+
+	// Not sent yet, and not lost: the withdrawal waits for a position good enough to place the agent.
+	await expect(page.getByText('1 changes waiting to be sent')).toBeVisible();
+	expect(api.withdrawals).toEqual([]);
+
+	await context.setGeolocation({ ...HERE, accuracy: 15 });
+
+	await expect.poll(() => api.withdrawals.length).toBe(1);
+	expect(api.withdrawals[0]).toMatchObject({
+		p_code: '86420',
+		p_lat: HERE.latitude,
+		p_lng: HERE.longitude,
+		p_accuracy_m: 15
+	});
+	await expect(page.getByText('New cash point added to the map. Thank you!')).toBeVisible();
+	// On the map for everyone: the app opened afresh lists the new agent nearby.
+	const later = await page.context().newPage();
+	await api.signInBeforeLoad(later);
+	await later.goto('/');
+	await expect(later.getByRole('region', { name: 'Nearby' }).getByRole('button', { name: /86420/ })).toBeVisible();
 });

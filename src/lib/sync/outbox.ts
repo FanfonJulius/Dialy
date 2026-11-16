@@ -1,6 +1,10 @@
 import type { DailyDatabase, OutboxEntry } from '#lib/data/local/db.js';
 import { NetworkError } from '#lib/data/supabase/errors.js';
+import type { Fix } from '#lib/domain/location.js';
 import {
+	LOCATION_GRACE_MS,
+	betterLocation,
+	needsBetterLocation,
 	withdrawalRejection,
 	type WithdrawalOutcome,
 	type WithdrawalRejection,
@@ -13,12 +17,14 @@ export const MAX_ATTEMPTS = 8;
 export type OutboxSenders = {
 	withdrawal: (request: WithdrawalRequest) => Promise<{ pointId: string; outcome: WithdrawalOutcome }>;
 	saved: (pointId: string, saved: boolean) => Promise<void>;
+	deletePoint: (pointId: string) => Promise<void>;
 };
 
 export type OutboxEvent =
 	| { type: 'withdrawal-recorded'; request: WithdrawalRequest; pointId: string; outcome: WithdrawalOutcome }
 	| { type: 'withdrawal-rejected'; request: WithdrawalRequest; reason: WithdrawalRejection }
-	| { type: 'saved-rejected'; pointId: string; saved: boolean };
+	| { type: 'saved-rejected'; pointId: string; saved: boolean }
+	| { type: 'delete-rejected'; pointId: string; cell: string };
 
 export type FlushResult = { sent: number; dropped: number; remaining: number };
 
@@ -36,18 +42,34 @@ export function isPermanentError(error: unknown): boolean {
 	return code === 'P0001' || code.startsWith('22') || code.startsWith('23');
 }
 
+/** A new point dialed without a usable position waits for one, at most LOCATION_GRACE_MS after the dial. */
+function isWaitingForLocation(entry: OutboxEntry, now: number): boolean {
+	return (
+		entry.kind === 'withdrawal' &&
+		needsBetterLocation(entry.request) &&
+		now < Date.parse(entry.request.capturedAt) + LOCATION_GRACE_MS
+	);
+}
+
 /** Changes made on the device, sent to the server in order once it can be reached. */
 export class Outbox {
 	#db: DailyDatabase;
 	#senders: OutboxSenders;
 	#onEvent: (event: OutboxEvent) => void;
+	#now: () => number;
 	#running = false;
 	#again = false;
 
-	constructor(db: DailyDatabase, senders: OutboxSenders, onEvent: (event: OutboxEvent) => void = () => {}) {
+	constructor(
+		db: DailyDatabase,
+		senders: OutboxSenders,
+		onEvent: (event: OutboxEvent) => void = () => {},
+		now: () => number = Date.now
+	) {
 		this.#db = db;
 		this.#senders = senders;
 		this.#onEvent = onEvent;
+		this.#now = now;
 	}
 
 	async enqueueWithdrawal(userId: string, request: WithdrawalRequest): Promise<void> {
@@ -79,6 +101,37 @@ export class Outbox {
 		});
 	}
 
+	async enqueueDeletePoint(userId: string, pointId: string, cell: string): Promise<void> {
+		await this.#db.outbox.put({
+			id: `delete:${pointId}`,
+			userId,
+			createdAt: Date.now(),
+			attempts: 0,
+			kind: 'delete-point',
+			pointId,
+			cell
+		});
+	}
+
+	/**
+	 * Gives the withdrawals waiting for a position this fix when it is better than what they have.
+	 * Returns true when one of them can now be sent.
+	 */
+	async offerFix(userId: string, fix: Fix): Promise<boolean> {
+		return this.#db.transaction('rw', this.#db.outbox, async () => {
+			let ready = false;
+			for (const entry of await this.#db.outbox.toArray()) {
+				if (entry.kind !== 'withdrawal' || entry.userId !== userId || !needsBetterLocation(entry.request)) continue;
+				const location = betterLocation(entry.request, fix);
+				if (!location) continue;
+				const request = { ...entry.request, location };
+				await this.#db.outbox.put({ ...entry, request });
+				ready ||= !needsBetterLocation(request);
+			}
+			return ready;
+		});
+	}
+
 	/** Sends this account's entries oldest first; stops at the first retryable failure. */
 	async flush(userId: string): Promise<FlushResult> {
 		const total: FlushResult = { sent: 0, dropped: 0, remaining: 0 };
@@ -107,15 +160,18 @@ export class Outbox {
 		const foreign = entries.filter((entry) => entry.userId !== userId);
 		// Another account's changes are never sent under this one.
 		await this.#db.outbox.bulkDelete(foreign.map((entry) => entry.id));
+		const now = this.#now();
 		const own = entries.filter((entry) => entry.userId === userId);
+		const ready = own.filter((entry) => !isWaitingForLocation(entry, now));
+		const waiting = own.length - ready.length;
 
-		for (const [index, entry] of own.entries()) {
+		for (const [index, entry] of ready.entries()) {
 			try {
 				await this.#send(entry);
 				await this.#db.outbox.delete(entry.id);
 				result.sent++;
 			} catch (error) {
-				const stopped = { ...result, remaining: own.length - index };
+				const stopped = { ...result, remaining: ready.length - index + waiting };
 				// Unreachable server: wait for the next chance without using up the entry's attempts.
 				if (error instanceof NetworkError) return stopped;
 				if (isPermanentError(error) || entry.attempts + 1 >= MAX_ATTEMPTS) {
@@ -128,12 +184,16 @@ export class Outbox {
 				return stopped;
 			}
 		}
-		return result;
+		return { ...result, remaining: waiting };
 	}
 
 	async #send(entry: OutboxEntry): Promise<void> {
 		if (entry.kind === 'saved') {
 			await this.#senders.saved(entry.pointId, entry.saved);
+			return;
+		}
+		if (entry.kind === 'delete-point') {
+			await this.#senders.deletePoint(entry.pointId);
 			return;
 		}
 		const { pointId, outcome } = await this.#senders.withdrawal(entry.request);
@@ -143,6 +203,10 @@ export class Outbox {
 	#reject(entry: OutboxEntry, error: unknown): void {
 		if (entry.kind === 'saved') {
 			this.#onEvent({ type: 'saved-rejected', pointId: entry.pointId, saved: entry.saved });
+			return;
+		}
+		if (entry.kind === 'delete-point') {
+			this.#onEvent({ type: 'delete-rejected', pointId: entry.pointId, cell: entry.cell });
 			return;
 		}
 		const reason = errorField(error, 'code') === 'P0001' ? withdrawalRejection(errorField(error, 'message')) : 'unknown';

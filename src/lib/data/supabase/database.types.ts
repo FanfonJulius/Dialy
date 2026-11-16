@@ -219,11 +219,22 @@ export type Database = {
 				};
 				Returns: (PointRow & { status: string })[];
 			};
+			points_in_cell: {
+				Args: {
+					p_x: number;
+					p_y: number;
+					p_since?: string;
+					p_since_id?: string;
+					p_limit?: number;
+				};
+				Returns: (PointRow & { status: string })[];
+			};
 			nearby_points: {
 				Args: { p_lat: number; p_lng: number; p_radius_m?: number; p_limit?: number };
 				Returns: (PointRow & { distance_m: number })[];
 			};
 			delete_my_account: { Args: never; Returns: undefined };
+			delete_my_point: { Args: { p_point_id: string }; Returns: undefined };
 			my_saved_points: {
 				Args: never;
 				Returns: (Omit<PointRow, 'id'> & { point_id: string; saved_at: string })[];
@@ -236,6 +247,7 @@ export type Database = {
 					captured_at: string;
 					point_id: string;
 					status: string;
+					created_point: boolean;
 				})[];
 			};
 		};

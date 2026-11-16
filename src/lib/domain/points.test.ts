@@ -106,6 +106,16 @@ describe('nearestPoints', () => {
 		expect(result[0].distanceM).toBeGreaterThan(90);
 		expect(result[0].distanceM).toBeLessThan(110);
 	});
+
+	it('leaves out every point farther than the radius, however few remain', () => {
+		const origin = { lat: 4.0511, lng: 9.7679 };
+		const inside = point({ id: 'inside', lat: 4.0518 }); // ~77 m
+		const outside = point({ id: 'outside', lat: 4.0521 }); // ~111 m
+
+		const result = nearestPoints([outside, inside], origin, 20, 100);
+
+		expect(result.map(({ point }) => point.id)).toEqual(['inside']);
+	});
 });
 
 describe('formatting', () => {

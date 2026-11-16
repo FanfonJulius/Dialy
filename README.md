@@ -41,6 +41,20 @@ The History screen (clock icon on the map) records a withdrawal or donation when
 Withdrawals also come back from the server (`my_withdrawals()`), so they follow the account to a new phone; donations
 stay on the phone.
 
+### Cash points
+
+- Every withdrawal dialed with a usable position puts its agent on the map for all users (`record_withdrawal()`
+  creates the point, or reuses the same code within 300 m). If the phone has no position, or one vaguer than 100 m,
+  at the moment of the dial, the withdrawal waits in the outbox for up to 3 minutes for a better fix (the user is
+  back from the dialer by then) before it is sent anyway.
+- Whoever added a point can delete it from its card (`delete_my_point()`), e.g. after a wrong code. The point is hidden
+  for everyone, never deleted, so offline phones learn about it on their next sync. Who added a point stays private:
+  only that user's own history says so (`my_withdrawals().created_point`).
+- Nearby lists only agents within 100 m; the search box (Search button or the keyboard's search key) opens the
+  closest agent with that code anywhere on the phone's map.
+- Points sync per map cell (z12 tile) with `points_in_cell()`, an index range scan on `(sync_cell, updated_at, id)`
+  whose cost does not grow with the size of the city. App builds released before it keep using `points_in_bbox()`.
+
 Walking directions use the public FOSSGIS OSRM server (`routing.openstreetmap.de`, foot profile, fair use; credited in
 the app). Without it, the app draws a straight line.
 
@@ -48,3 +62,16 @@ the app). Without it, the app draws a straight line.
 
 `vercel.json` builds with `npm run build`, serves `build/`, rewrites every route to the SPA shell and sets security
 and caching headers.
+
+Apply new migrations (`npm run db:push`) before or together with the app release: the app falls back to
+`points_in_bbox()` while `points_in_cell()` is missing, but deleting a point needs `delete_my_point()`.
+
+## Launch screen and installing
+
+- `src/app.html` draws the launch screen (logo and name, light or dark) in plain HTML and CSS, so it is on screen from
+  the first frame, before any script runs; `hideLaunchScreen()` removes it once the first screen has rendered. Its
+  background matches the manifest's `background_color`, which Android uses for its own splash screen.
+- Right after a withdrawal is dialed (when the user comes back from the phone's dialer), Daily offers to add itself
+  to the Home screen: the browser's install prompt where there is one (Android), otherwise the steps for Safari
+  (iPhone, iPad), the browser menu (Android) or "open in your browser" (Facebook, Instagram… in-app browsers). After
+  "Not now" it comes back after 3 days, and never after being turned down 3 times or once installed.

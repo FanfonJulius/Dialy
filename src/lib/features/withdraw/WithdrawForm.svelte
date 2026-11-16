@@ -4,6 +4,7 @@
 	import {
 		amountIssue,
 		codeIssue,
+		needsBetterLocation,
 		parseAmount,
 		withdrawalLocation,
 		type AmountIssue,
@@ -14,6 +15,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { history } from '#lib/stores/history.svelte.js';
+	import { install } from '#lib/stores/install.svelte.js';
 	import { outbox } from '#lib/stores/outbox.svelte.js';
 	import AmountField from '#lib/ui/AmountField.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -47,7 +49,8 @@
 	);
 	// One id per USSD string: dialing or copying the same withdrawal twice records it once.
 	const clientUuid = $derived(ussd ? crypto.randomUUID() : null);
-	const canAddPoint = $derived(pointId !== null || geolocation.fix !== null);
+	// A position may still arrive after the dial (the withdrawal waits for it), unless location is off.
+	const canAddPoint = $derived(pointId !== null || geolocation.fix !== null || geolocation.canLocate);
 	const segments = $derived(network.withdrawalTemplate ? ussdSegments(network.withdrawalTemplate) : []);
 	// What is dialed before the agent code, e.g. `*126*16*` (MTN) or `#150*14*` (Orange).
 	const codePrefix = $derived(segments[0]?.kind === 'text' && segments[1]?.kind === 'code' ? segments[0].value : '');
@@ -89,18 +92,16 @@
 			dialedAt: capturedAt,
 			pointId
 		});
-		const location = withdrawalLocation(geolocation.fix, now);
-		// Without a point or a position the server could not place the withdrawal.
-		if (!pointId && !location) return;
-		void outbox.recordWithdrawal({
-			clientUuid,
-			network: network.id,
-			code,
-			amount,
-			capturedAt,
-			pointId,
-			location
-		});
+		// Right after a dial the user has just seen what Daily saves them: offer the Home screen then.
+		install.dialed();
+		const location = withdrawalLocation(geolocation.latest, now);
+		// Location refused or unavailable on this phone: a new point could never be placed.
+		if (!pointId && !location && !geolocation.canLocate) return;
+		const request = { clientUuid, network: network.id, code, amount, capturedAt, pointId, location };
+		// Old or vague position: ask for a fresh one, which the waiting withdrawal picks up.
+		if (needsBetterLocation(request)) geolocation.refresh();
+		// Queued even without a usable position: the outbox waits a little for one before sending.
+		void outbox.recordWithdrawal(request);
 	}
 
 	function dial(): void {

@@ -10,7 +10,7 @@
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │           MapScreen.svelte (Main View)                   │  │
 │  │  ┌─────────────────────────────────────────────────────┐ │  │
-│  │  │ MapView (Leaflet)                                   │ │  │
+│  │  │ MapView (MapLibre GL, lazy-loaded)                  │ │  │
 │  │  │ • Displays all visible points on map                │ │  │
 │  │  │ • Shows user location (geolocation.fix)             │ │  │
 │  │  │ • Renders route line (if directions active)         │ │  │
@@ -71,20 +71,25 @@
 │  │  ┌─ public.points                                       │  │
 │  │  │  SELECT: All authenticated users can read all        │  │
 │  │  │          active/hidden points (anonymously)          │  │
-│  │  │  UPDATE: Only admins can update point details        │  │
+│  │  │  WRITE:  Only through record_withdrawal() and         │  │
+│  │  │          delete_my_point() (security definer RPCs)   │  │
 │  │  │                                                       │  │
 │  │  └─ public.withdrawals                                  │  │
 │  │     SELECT: Each user sees only their own withdrawals   │  │
-│  │     INSERT: User creates their own withdrawal records   │  │
+│  │     WRITE:  Only through record_withdrawal()            │  │
 │  │                                                           │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │           Key RPC Functions                              │  │
-│  │  • points_in_bbox() - fetch points in bounding box      │  │
+│  │  • points_in_cell() - delta sync of one z12 map cell    │  │
+│  │    (indexed; points_in_bbox() kept for old app builds)  │  │
 │  │  • nearby_points() - fetch points within radius         │  │
 │  │  • my_saved_points() - fetch user's saved points        │  │
-│  │  • record_withdrawal() - add withdrawal + point        │  │
+│  │  • my_withdrawals() - user's history (+ created_point)  │  │
+│  │  • record_withdrawal() - add withdrawal, create/reuse   │  │
+│  │    the agent's point                                    │  │
+│  │  • delete_my_point() - author hides a point they added  │  │
 │  │                                                           │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                   │
@@ -242,7 +247,7 @@ public.withdrawals
 
 ```
 MapScreen.svelte (Main orchestrator)
-├── MapView.svelte (Leaflet map display)
+├── MapView.svelte (MapLibre GL map display)
 │   └── Uses: visiblePoints, fix, selectedId, route
 ├── MapSearch.svelte (Search + filter)
 │   └── Manages: filter (network + code)

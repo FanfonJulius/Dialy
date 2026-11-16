@@ -5,23 +5,36 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import Icon from '#lib/ui/Icon.svelte';
 
-	let { filter = $bindable(), networks }: { filter: PointFilter; networks: readonly StoredNetwork[] } =
-		$props();
+	type Props = {
+		filter: PointFilter;
+		networks: readonly StoredNetwork[];
+		/** Called when the user submits a code (Search button or the keyboard's search key). */
+		onsearch?: (code: string) => void;
+	};
+
+	let { filter = $bindable(), networks, onsearch }: Props = $props();
 
 	const MAX_CODE_LENGTH = 6;
+	// What is typed; it only filters the map once the user searches.
 	let draftCode = $state(filter.code);
+	let input: HTMLInputElement;
 
 	function setCode(raw: string): void {
 		draftCode = raw.replace(/\D/g, '').slice(0, MAX_CODE_LENGTH);
 	}
 
-	function applySearch(): void {
+	function search(event: SubmitEvent): void {
+		event.preventDefault();
 		filter = { ...filter, code: draftCode };
+		// Closes the phone keyboard so the result on the map is visible.
+		input.blur();
+		if (draftCode) onsearch?.(draftCode);
 	}
 
-	function clearSearch(): void {
+	function clear(): void {
 		draftCode = '';
 		filter = { ...filter, code: '' };
+		input.focus();
 	}
 
 	const chips = $derived([
@@ -31,39 +44,38 @@
 </script>
 
 <div class="flex flex-col gap-2">
-	<form class="flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 shadow-md" onsubmit={(e) => {
-		e.preventDefault();
-		applySearch();
-	}}>
-		<Icon name="search" class="size-5 shrink-0 text-fg-muted" />
-		<span class="sr-only">{m.map_search_label()}</span>
-		<input
-			class="min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
-			type="text"
-			inputmode="numeric"
-			autocomplete="off"
-			maxlength={MAX_CODE_LENGTH}
-			placeholder={m.map_search_placeholder()}
-			value={draftCode}
-			oninput={(event) => setCode(event.currentTarget.value)}
-		/>
-		{#if draftCode}
-			<button
-				type="button"
-				class="-m-1 rounded-full p-1 text-fg-muted hover:text-fg transition-colors"
-				aria-label={m.map_search_clear()}
-				onclick={(e) => {
-					e.preventDefault();
-					clearSearch();
+	<form
+		role="search"
+		class="flex items-center gap-1 rounded-full border border-border bg-surface py-1.5 pr-1.5 pl-4 shadow-md focus-within:border-primary"
+		onsubmit={search}
+	>
+		<label class="flex min-w-0 flex-1 items-center gap-2">
+			<Icon name="search" class="size-5 shrink-0 text-fg-muted" />
+			<span class="sr-only">{m.map_search_label()}</span>
+			<input
+				bind:this={input}
+				class="min-w-0 flex-1 bg-transparent py-1 text-base text-fg outline-none placeholder:text-fg-muted"
+				type="text"
+				inputmode="numeric"
+				enterkeyhint="search"
+				autocomplete="off"
+				maxlength={MAX_CODE_LENGTH}
+				placeholder={m.map_search_placeholder()}
+				value={draftCode}
+				oninput={(event) => {
+					setCode(event.currentTarget.value);
+					event.currentTarget.value = draftCode;
 				}}
-			>
+			/>
+		</label>
+		{#if draftCode}
+			<button type="button" class="rounded-full p-2 text-fg-muted active:bg-surface-2" aria-label={m.map_search_clear()} onclick={clear}>
 				<Icon name="close" class="size-5" />
 			</button>
 		{/if}
 		<button
 			type="submit"
-			class="rounded-full bg-primary px-3 py-1 text-sm font-medium text-on-primary hover:opacity-90 transition-opacity"
-			aria-label={m.map_search_submit()}
+			class="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition-transform active:scale-95"
 		>
 			{m.map_search_submit()}
 		</button>

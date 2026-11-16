@@ -58,9 +58,11 @@ describe('anonymous users', () => {
 
 	it.each([
 		'select * from public.points_in_bbox(9.7, 4.0, 9.8, 4.1)',
+		'select * from public.points_in_cell(2159, 2001)',
 		'select * from public.nearby_points(4.05, 9.76)',
 		`select * from public.record_withdrawal('${randomUUID()}', 'mtn', '54321', 5000, 4.05, 9.76, 10)`,
 		'select public.delete_my_account()',
+		`select public.delete_my_point('${randomUUID()}')`,
 		'select * from public.my_saved_points()',
 		'select * from public.my_withdrawals()'
 	])('cannot call %s', async (sql) => {
@@ -102,6 +104,7 @@ describe('public data', () => {
 			'location',
 			'network_id',
 			'status',
+			'sync_cell',
 			'updated_at',
 			'withdrawal_count'
 		]);
@@ -242,6 +245,60 @@ describe('internal helpers', () => {
 	it('cannot be called through the API roles', async () => {
 		await actAs(db, alice);
 		expectPermissionDenied((await attempt(db, 'select private.make_location(4.0, 9.7)')).error);
+	});
+});
+
+describe('delete_my_point', () => {
+	async function status(pointId: string): Promise<string> {
+		await actAsAdmin(db);
+		const { rows } = await db.query<{ status: string }>('select status from public.points where id = $1', [pointId]);
+		return rows[0].status;
+	}
+
+	it('lets the user who added a point take it off the map for everyone', async () => {
+		const pointId = await createPoint(alice);
+
+		await actAs(db, alice);
+		expect((await attempt(db, 'select public.delete_my_point($1)', [pointId])).error).toBeNull();
+
+		expect(await status(pointId)).toBe('hidden');
+	});
+
+	it('refuses everyone else, even users who withdrew at the point', async () => {
+		const pointId = await createPoint(alice);
+		await createPoint(bob); // same code and place: bob's withdrawal is attached to alice's point
+
+		await actAs(db, bob);
+		const { error } = await attempt(db, 'select public.delete_my_point($1)', [pointId]);
+
+		expect(error?.message).toBe('not_point_creator');
+		expect(await status(pointId)).toBe('active');
+	});
+
+	it('is harmless to repeat and says when the point does not exist', async () => {
+		const pointId = await createPoint(alice);
+		await actAs(db, alice);
+		await db.query('select public.delete_my_point($1)', [pointId]);
+
+		expect((await attempt(db, 'select public.delete_my_point($1)', [pointId])).error).toBeNull();
+		expect((await attempt(db, 'select public.delete_my_point($1)', [randomUUID()])).error?.message).toBe(
+			'point_not_found'
+		);
+	});
+
+	it('tells only the author, through their history, which points they added', async () => {
+		const pointId = await createPoint(alice);
+		await createPoint(bob);
+
+		await actAs(db, alice);
+		const mine = await db.query<{ point_id: string; created_point: boolean }>(
+			'select point_id, created_point from public.my_withdrawals()'
+		);
+		await actAs(db, bob);
+		const bobs = await db.query<{ created_point: boolean }>('select created_point from public.my_withdrawals()');
+
+		expect(mine.rows).toEqual([{ point_id: pointId, created_point: true }]);
+		expect(bobs.rows).toEqual([{ created_point: false }]);
 	});
 });
 

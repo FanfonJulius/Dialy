@@ -17,6 +17,8 @@ export type HistoryEntry = {
 	dialedAt: string;
 	/** The point withdrawn at; null for donations and until the server places a new point. */
 	pointId: string | null;
+	/** True when this withdrawal put the point on the map: its author may delete it. */
+	createdPoint?: boolean;
 };
 
 export type ServerWithdrawal = {
@@ -26,6 +28,7 @@ export type ServerWithdrawal = {
 	point: CashPoint;
 	/** Hidden points are no longer shown on the map. */
 	active: boolean;
+	createdPoint: boolean;
 };
 
 const WithdrawalRowSchema = v.object({
@@ -34,7 +37,9 @@ const WithdrawalRowSchema = v.object({
 	captured_at: v.pipe(v.string(), v.isoTimestamp()),
 	point_id: v.pipe(v.string(), v.uuid()),
 	...pointFields,
-	status: v.picklist(['active', 'hidden'])
+	status: v.picklist(['active', 'hidden']),
+	// Absent from databases not yet migrated.
+	created_point: v.optional(v.boolean(), false)
 });
 
 /** Validates a my_withdrawals response; malformed rows are dropped. */
@@ -51,10 +56,25 @@ export function parseWithdrawalHistory(rows: unknown): ServerWithdrawal[] {
 				// Same format as the times saved on the phone, so they sort together.
 				dialedAt: new Date(row.captured_at).toISOString(),
 				point: toCashPoint(row.point_id, row),
-				active: row.status === 'active'
+				active: row.status === 'active',
+				createdPoint: row.created_point
 			}
 		];
 	});
+}
+
+/** Points the user put on the map (and may therefore delete), from their history. */
+export function createdPointIds(entries: readonly HistoryEntry[]): Set<string> {
+	return new Set(entries.flatMap((entry) => (entry.createdPoint && entry.pointId ? [entry.pointId] : [])));
+}
+
+/**
+ * The entry to keep when a dial is recorded again under the same id (the user taps Dial again for the
+ * same code and amount): it keeps the point the server already gave it and whether that dial added it.
+ */
+export function redial(entry: HistoryEntry, existing: HistoryEntry | undefined): HistoryEntry {
+	if (!existing) return entry;
+	return { ...entry, pointId: entry.pointId ?? existing.pointId, createdPoint: existing.createdPoint ?? entry.createdPoint };
 }
 
 export type HistoryPoint = {

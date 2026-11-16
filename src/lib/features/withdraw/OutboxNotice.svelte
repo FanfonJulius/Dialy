@@ -1,8 +1,7 @@
 <script lang="ts">
-	import type { OutboxEvent } from '#lib/sync/outbox.js';
 	import type { WithdrawalRejection } from '#lib/domain/withdrawal.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { outbox } from '#lib/stores/outbox.svelte.js';
+	import { outbox, type OutboxNoticeEvent } from '#lib/stores/outbox.svelte.js';
 	import Icon from '#lib/ui/Icon.svelte';
 
 	const AUTO_DISMISS_MS = 8000;
@@ -19,7 +18,7 @@
 		point_mismatch: m.notice_rejected_point_gone
 	};
 
-	function message(event: OutboxEvent): string {
+	function message(event: OutboxNoticeEvent): string {
 		switch (event.type) {
 			case 'withdrawal-recorded':
 				return event.outcome === 'created' ? m.notice_point_created() : m.notice_withdrawal_recorded();
@@ -27,13 +26,28 @@
 				return (REJECTIONS[event.reason] ?? m.notice_rejected_other)();
 			case 'saved-rejected':
 				return m.notice_saved_failed();
+			case 'point-deleted':
+				return m.notice_point_deleted();
+			case 'delete-rejected':
+				return m.notice_delete_failed();
 		}
 	}
 
 	$effect(() => {
 		if (!outbox.notice) return;
-		const timer = setTimeout(() => outbox.dismiss(), AUTO_DISMISS_MS);
-		return () => clearTimeout(timer);
+		// Counted only while Daily is on screen: a result that arrives while the user is in the phone's
+		// dialer is still there when they come back.
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const arm = (): void => {
+			clearTimeout(timer);
+			if (document.visibilityState === 'visible') timer = setTimeout(() => outbox.dismiss(), AUTO_DISMISS_MS);
+		};
+		arm();
+		document.addEventListener('visibilitychange', arm);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('visibilitychange', arm);
+		};
 	});
 </script>
 

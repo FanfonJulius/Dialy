@@ -524,6 +524,29 @@ The recent technical improvements (100m radius, search button, saved points) imp
 
 ---
 
+## Part 11: Scaling to 10 Million Daily Users
+
+### Already in the app
+
+| Area | What makes it scale |
+|------|---------------------|
+| Point sync (hottest read path) | `points_in_cell()` reads one z12 map cell through the `(sync_cell, updated_at, id)` index, the cursor bounding the scan. Measured on 100,000 points (13,000 in the busiest city cell), planned the way Postgres runs the function: a sync where nothing changed reads 148 buffers in 0.5 ms (a nullable-cursor version of the same query read 13,570 buffers in 23 ms; the old bounding-box query took 53–101 ms on that data); the first page of that cell takes 6.6 ms. The cost no longer grows with the size of the city. |
+| Writes | Withdrawals are idempotent (`client_uuid`), serialised per user and per agent code with advisory locks, and every rule check is an indexed lookup. Offline phones queue them and send them as soon as the server is reachable (retried every minute). |
+| App shell | Static SPA on a CDN, precached by the service worker: opening the app costs no server request. The launch screen paints from the cached HTML on the first frame. |
+| Startup | No network wait when a session is stored; history and saved points load once the map's requests are under way; the first API connection is pre-opened (`preconnect`). |
+| Bandwidth | Each phone only syncs the cells it looks at, at most every 2 minutes per cell, and only rows changed since its cursor. |
+
+### Still needed in infrastructure (in this order)
+
+1. **Database size and pooling:** a dedicated Supabase compute tier, connections through Supavisor (transaction mode), `pg_stat_statements` dashboards with p95 alerts on `record_withdrawal` and `points_in_cell`.
+2. **Read replicas** for `points_in_cell`, `nearby_points` and `my_withdrawals` (all read-only); writes stay on the primary.
+3. **Partition `withdrawals` by month** once it passes ~100 M rows; the per-user indexes stay small and old months can be archived.
+4. **Abuse limits at the edge** (per-IP and per-account rate limits in front of the API), since accounts are free to create; the per-account daily limits in the database stay as the last line.
+5. **CDN snapshots per map cell** (rebuilt every few minutes) for first-time syncs of busy cities, so cold starts never hit the database.
+6. **Load test before each growth step** (e.g. k6 replaying a day of sync and dial traffic) with targets: p95 < 150 ms for sync, < 300 ms for `record_withdrawal`.
+
+---
+
 ## Appendix: API Design Examples
 
 ### Reviews API

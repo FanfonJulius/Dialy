@@ -44,7 +44,13 @@ type OutboxBase = {
 /** Changes made on the device and not yet confirmed by the server, oldest first. */
 export type OutboxEntry =
 	| (OutboxBase & { kind: 'withdrawal'; request: WithdrawalRequest })
-	| (OutboxBase & { kind: 'saved'; pointId: string; saved: boolean });
+	| (OutboxBase & { kind: 'saved'; pointId: string; saved: boolean })
+	| (OutboxBase & {
+			kind: 'delete-point';
+			pointId: string;
+			/** Sync cell the point was in, fetched again if the server refuses the deletion. */
+			cell: string;
+	  });
 
 /** A basemap tile kept on the device, keyed `z/x/y`. */
 export type StoredTile = {

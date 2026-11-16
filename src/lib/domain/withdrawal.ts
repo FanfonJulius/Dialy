@@ -57,6 +57,29 @@ export function withdrawalLocation(fix: Fix | null, now: number): WithdrawalRequ
 	return { lat: fix.lat, lng: fix.lng, accuracyM: Math.round(fix.accuracy) };
 }
 
+/** The server only creates a point from a fix at least this accurate (assert_can_create_point). */
+export const MAX_POINT_ACCURACY_M = 100;
+/**
+ * How long after the dial a withdrawal may wait for a usable position before it is sent anyway.
+ * The user is still at the agent then: in the USSD session, then counting the cash.
+ */
+export const LOCATION_GRACE_MS = 3 * 60_000;
+
+/** Whether the withdrawal cannot place a new point yet: no tapped point and no accurate enough position. */
+export function needsBetterLocation(request: WithdrawalRequest): boolean {
+	if (request.pointId !== null) return false;
+	return request.location === null || request.location.accuracyM > MAX_POINT_ACCURACY_M;
+}
+
+/** A position to use instead of the request's: a more accurate fix taken around the time of the dial. */
+export function betterLocation(request: WithdrawalRequest, fix: Fix): WithdrawalRequest['location'] {
+	const dialedAt = Date.parse(request.capturedAt);
+	if (fix.timestamp < dialedAt - MAX_FIX_AGE_MS || fix.timestamp > dialedAt + LOCATION_GRACE_MS) return null;
+	const accuracyM = Math.round(fix.accuracy);
+	if (request.location !== null && request.location.accuracyM <= accuracyM) return null;
+	return { lat: fix.lat, lng: fix.lng, accuracyM };
+}
+
 // Stable keys raised by record_withdrawal (supabase/migrations/*_withdrawal_functions.sql).
 const REJECTIONS = [
 	'invalid_request',

@@ -33,12 +33,29 @@ type PointRow = {
 export type RecordedWithdrawal = Record<string, unknown>;
 
 /** A withdrawal as the server keeps it for its user's history. */
-export type HistoryRow = { client_uuid: string; amount: number; captured_at: string; point_id: string };
+export type HistoryRow = {
+	client_uuid: string;
+	amount: number;
+	captured_at: string;
+	point_id: string;
+	created_point?: boolean;
+};
 
 const PAST = '2026-10-01T08:00:00.000Z';
+const SYNC_CELL_ZOOM = 12;
 
 function base64url(value: object): string {
 	return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+/** The z12 tile holding a point, like private.sync_cell() in the database. */
+function syncCell(point: { lat: number; lng: number }): { x: number; y: number } {
+	const n = 2 ** SYNC_CELL_ZOOM;
+	const radians = (point.lat * Math.PI) / 180;
+	return {
+		x: Math.floor(((point.lng + 180) / 360) * n),
+		y: Math.floor(((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2) * n)
+	};
 }
 
 function distanceM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -157,7 +174,18 @@ export class FakeSupabase {
 			return json(200, single ? this.profile : [this.profile]);
 		}
 		if (path === '/rest/v1/rpc/points_in_bbox') return json(200, this.#pointsInBbox(body));
+		if (path === '/rest/v1/rpc/points_in_cell') return json(200, this.#pointsInCell(body));
 		if (path === '/rest/v1/rpc/record_withdrawal') return json(200, this.#record(body));
+		if (path === '/rest/v1/rpc/delete_my_point') {
+			const id = String(body.p_point_id);
+			const point = this.points.find((p) => p.id === id);
+			if (!point) return json(400, { code: 'P0001', message: 'point_not_found' });
+			const created = this.history.some((row) => row.point_id === id && row.created_point);
+			if (!created) return json(400, { code: 'P0001', message: 'not_point_creator' });
+			point.status = 'hidden';
+			point.updated_at = new Date().toISOString();
+			return route.fulfill({ status: 204 });
+		}
 		if (path === '/rest/v1/rpc/my_saved_points') {
 			return json(
 				200,
@@ -178,7 +206,7 @@ export class FakeSupabase {
 						const point = this.points.find((p) => p.id === row.point_id);
 						if (!point) return [];
 						const { id, ...fields } = point;
-						return [{ ...row, point_id: id, ...fields }];
+						return [{ ...row, point_id: id, ...fields, created_point: row.created_point ?? false }];
 					})
 			);
 		}
@@ -223,6 +251,17 @@ export class FakeSupabase {
 			.sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id));
 	}
 
+	#pointsInCell(body: Record<string, unknown>): PointRow[] {
+		const since = typeof body.p_since === 'string' ? body.p_since : null;
+		return this.points
+			.filter((p) => {
+				const cell = syncCell(p);
+				return cell.x === Number(body.p_x) && cell.y === Number(body.p_y);
+			})
+			.filter((p) => since === null || p.updated_at > since)
+			.sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id));
+	}
+
 	#record(body: Record<string, unknown>): { point_id: string; outcome: string } {
 		this.withdrawals.push(body);
 		const now = new Date().toISOString();
@@ -231,18 +270,19 @@ export class FakeSupabase {
 		point ??= location
 			? this.points.find((p) => p.network_id === body.p_network_id && p.code === body.p_code && distanceM(p, location) <= 300)
 			: undefined;
-		const remember = (pointId: string) =>
+		const remember = (pointId: string, createdPoint: boolean) =>
 			this.history.push({
 				client_uuid: String(body.p_client_uuid),
 				amount: Number(body.p_amount),
 				captured_at: typeof body.p_captured_at === 'string' ? body.p_captured_at : now,
-				point_id: pointId
+				point_id: pointId,
+				created_point: createdPoint
 			});
 		if (point) {
 			point.withdrawal_count++;
 			point.last_withdrawal_at = now;
 			point.updated_at = now;
-			remember(point.id);
+			remember(point.id, false);
 			return { point_id: point.id, outcome: 'attached' };
 		}
 		const created: PointRow = {
@@ -258,7 +298,7 @@ export class FakeSupabase {
 			updated_at: now
 		};
 		this.points.push(created);
-		remember(created.id);
+		remember(created.id, true);
 		return { point_id: created.id, outcome: 'created' };
 	}
 }

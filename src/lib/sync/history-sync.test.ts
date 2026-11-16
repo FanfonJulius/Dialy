@@ -5,12 +5,13 @@ import { DailyDatabase, clearUserData } from '#lib/data/local/db.js';
 import type { HistoryEntry, ServerWithdrawal } from '#lib/domain/history.js';
 import { pullHistory } from './history-sync.js';
 
-function serverWithdrawal(clientUuid: string, pointId: string, active = true): ServerWithdrawal {
+function serverWithdrawal(clientUuid: string, pointId: string, active = true, createdPoint = false): ServerWithdrawal {
 	return {
 		clientUuid,
 		amount: 20000,
 		dialedAt: '2026-10-16T14:30:00.000Z',
 		active,
+		createdPoint,
 		point: {
 			id: pointId,
 			network: 'mtn',
@@ -64,6 +65,13 @@ describe('pullHistory', () => {
 
 		expect(await db.history.get('w1')).toMatchObject({ pointId: 'gone' });
 		expect(await db.points.get('gone')).toBeUndefined();
+	});
+
+	it('remembers which points the user added, also on a new phone, so they can delete them', async () => {
+		await pullHistory(db, 'u1', async () => [serverWithdrawal('w1', 'mine', true, true), serverWithdrawal('w2', 'theirs')]);
+
+		expect(await db.history.get('w1')).toMatchObject({ pointId: 'mine', createdPoint: true });
+		expect(await db.history.get('w2')).toMatchObject({ pointId: 'theirs', createdPoint: false });
 	});
 
 	it('is cleared with the rest of the account data on sign-out', async () => {

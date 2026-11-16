@@ -16,7 +16,13 @@
 		| 'history'
 		| 'directions'
 		| 'eye'
-		| 'eye-off';
+		| 'eye-off'
+		| 'pin'
+		| 'trash'
+		| 'share'
+		| 'dots-vertical'
+		| 'dots-horizontal'
+		| 'add-square';
 </script>
 
 <script lang="ts">
@@ -73,6 +79,26 @@
 	{:else if name === 'directions'}
 		<path d="M12 2.5 21.5 12 12 21.5 2.5 12z" />
 		<path d="M9 14.5v-3a1.5 1.5 0 0 1 1.5-1.5H15m-2-2 2 2-2 2" />
+	{:else if name === 'pin'}
+		<path d="M12 21s-6.5-5.6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z" />
+		<circle cx="12" cy="9.8" r="2.3" />
+	{:else if name === 'trash'}
+		<path d="M4 6.5h16M9.5 6.5V4.5h5v2M6.5 6.5l.9 13a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4l.9-13" />
+		<path d="M10 10.5v6M14 10.5v6" />
+	{:else if name === 'share'}
+		<path d="M12 3.5v11M8 7.5l4-4 4 4" />
+		<path d="M8.5 10.5H6.5A1.5 1.5 0 0 0 5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7a1.5 1.5 0 0 0-1.5-1.5h-2" />
+	{:else if name === 'dots-vertical'}
+		<circle cx="12" cy="5.5" r="1.3" fill="currentColor" />
+		<circle cx="12" cy="12" r="1.3" fill="currentColor" />
+		<circle cx="12" cy="18.5" r="1.3" fill="currentColor" />
+	{:else if name === 'dots-horizontal'}
+		<circle cx="5.5" cy="12" r="1.3" fill="currentColor" />
+		<circle cx="12" cy="12" r="1.3" fill="currentColor" />
+		<circle cx="18.5" cy="12" r="1.3" fill="currentColor" />
+	{:else if name === 'add-square'}
+		<rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+		<path d="M12 8v8M8 12h8" />
 	{:else}
 		<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" />
 		<circle cx="12" cy="12" r="3" />
