@@ -23,3 +23,22 @@ export function whenIdle(task: () => void): void {
 		setTimeout(task, IDLE_TIMEOUT_MS / 3);
 	}
 }
+
+/** Fields that bring up the phone's keyboard while they have the focus. */
+const KEYBOARD_FIELDS = 'input, textarea, select, [contenteditable]';
+
+/**
+ * A field still focused when Daily is left brings the keyboard back over the screen the next time Daily
+ * is opened (iPhone keeps the app in memory, and tapping Dial there does not take the focus off the
+ * amount field). So the field is let go whenever Daily goes to the background.
+ */
+export function releaseKeyboardOnLeave(): void {
+	const release = (): void => {
+		const field = document.activeElement;
+		if (field instanceof HTMLElement && field.matches(KEYBOARD_FIELDS)) field.blur();
+	};
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'hidden') release();
+	});
+	window.addEventListener('pagehide', release);
+}

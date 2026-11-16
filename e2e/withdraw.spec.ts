@@ -117,3 +117,21 @@ test('a new agent dialed before the phone has a precise position is added as soo
 	await later.goto('/');
 	await expect(later.getByRole('region', { name: 'Nearby' }).getByRole('button', { name: /86420/ })).toBeVisible();
 });
+
+test('leaving Daily (e.g. for the dialer) lets go of the field typed in, so it reopens without the keyboard', async ({
+	page
+}) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: /Orange Money 13579/ }).click();
+	const amount = page.getByLabel('Amount (FCFA)');
+	await amount.fill('5000');
+	await expect(amount).toBeFocused();
+
+	await page.evaluate(() => {
+		Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+
+	await expect(amount).not.toBeFocused();
+	await expect(amount).toHaveValue('5000');
+});

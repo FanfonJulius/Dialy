@@ -34,7 +34,6 @@
 	function clear(): void {
 		draftCode = '';
 		filter = { ...filter, code: '' };
-		input.focus();
 	}
 
 	const chips = $derived([

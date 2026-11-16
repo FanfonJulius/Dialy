@@ -76,6 +76,8 @@ test('searching a code that is not on the map says so', async ({ page }) => {
 	await expect(page.getByText('No agent with code 999999 on the map here yet.')).toBeVisible();
 	await page.getByRole('button', { name: 'Clear search' }).click();
 	await expect(page.getByText('No agent with code 999999 on the map here yet.')).toBeHidden();
+	// Clearing does not bring up the keyboard.
+	await expect(page.getByRole('textbox', { name: 'Search by agent code' })).not.toBeFocused();
 });
 
 test('the launch screen shows the logo and name while Daily starts, then gets out of the way', async ({ page }) => {
